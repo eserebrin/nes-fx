@@ -1,0 +1,43 @@
+
+# Created by https://www.toptal.com/developers/gitignore/api/sbt,metals,visualstudiocode,scala
+# Edit at https://www.toptal.com/developers/gitignore?templates=sbt,metals,visualstudiocode,scala
+
+### Metals ###
+.metals/
+.bloop/
+project/metals.sbt
+
+### SBT ###
+# Simple Build Tool
+# http://www.scala-sbt.org/release/docs/Getting-Started/Directories.html#configuring-version-control
+
+dist/*
+target/
+lib_managed/
+src_managed/
+project/boot/
+project/plugins/project/
+.history
+.cache
+.lib/
+
+### Scala ###
+*.class
+*.log
+
+### VisualStudioCode ###
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+### VisualStudioCode Patch ###
+# Ignore all local history of files
+
+# End of https://www.toptal.com/developers/gitignore/api/sbt,metals,visualstudiocode,scala
+
+.project/
+.DS_Store
+test-roms/
