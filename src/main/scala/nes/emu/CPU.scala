@@ -19,29 +19,36 @@ class CPU(memory: Memory) {
         private var cyclesToPerform = mutable.Buffer[() => Unit]()
 
         // The information needed to complete the current operation
-        private var storedData = mutable.Buffer[Byte]()
+        private var storedData = mutable.Buffer[Int]()
 
         def add(operation: () => Unit): Unit = cyclesToPerform += operation
         def executeNext(): Unit = cyclesToPerform.remove(0)()
         def isOperationFinished(): Boolean = cyclesToPerform.length == 0
 
-        def storeByte(byte: Byte): Unit = storedData += byte
-        def getNextStoredByte(): Byte = storedData.remove(0)
-        def clearStoredData(): Unit = storedData = mutable.Buffer[Byte]()
+        def storeByte(byte: Int): Unit = storedData += byte
+        def getNextStoredByte(): Int = storedData.remove(0)
+        def clearStoredData(): Unit = storedData = mutable.Buffer[Int]()
 
     }
 
 
     /* ------ CPU cycle helper methods ------ */
 
-    private def fetchByte(): Unit = {
+    private def fetchNextByte(): Unit = {
         Cycles.storeByte(memory(programCounter))
         programCounter += 1
     }
 
+    private def fetchNextByteFromAddress(): Unit = {
+        val pointerLowByte = Cycles.getNextStoredByte()
+        val pointerHighByte = Cycles.getNextStoredByte()
+        val pointer = pointerHighByte << 8 | pointerLowByte
+        Cycles.storeByte(memory(pointer))
+    }
+
     // private def fetchAddress(): Int = {
-    //     Cycles.add(fetchByte)
-    //     Cycles.add(fetchByte)
+    //     Cycles.add(fetchNextByte)
+    //     Cycles.add(fetchNextByte)
     //     val lowByte = Cycles.getNextStoredByte()
     //     val highByte = Cycles.getNextStoredByte() << 8
     //     highByte | lowByte
@@ -49,21 +56,53 @@ class CPU(memory: Memory) {
 
     /* ------ Main CPU operation methods ------ */
 
-    private def startOperation(opcode: Byte): Unit = opcode match {
+    private def startOperation(opcode: Int): Unit = opcode match {
 
         // JMP -- Absolute
         case 0x4C => {
-            Cycles.add(fetchByte)
+            Cycles.add(fetchNextByte)
             Cycles.add(() => {
-                fetchByte()
                 val addressLowByte = Cycles.getNextStoredByte()
-                val addressHighByte = Cycles.getNextStoredByte() << 8
+                val addressHighByte = memory(programCounter) << 8
                 programCounter = addressHighByte | addressLowByte
             })
         }
 
-        // NOP
+        // JMP -- Indirect
+        case 0x6C => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(fetchNextByte)
+            // TODO: page boundary bug
+            Cycles.add(fetchNextByteFromAddress)
+            Cycles.add(() => {
+                programCounter = Cycles.getNextStoredByte()
+            })
+        }
+
+        // LDA -- Immediate
+        case 0xA9 => {
+            Cycles.add(() => {
+                accumulator = memory(programCounter)
+                programCounter += 1
+            })
+        }
+
+        // LDA -- Zero Page
+        case 0xA5 => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                accumulator = memory(Cycles.getNextStoredByte())
+            })
+        }
+
+        // LDA -- Zero Page, X
+        case 0xB5 => {
+        }
+
+        // NOP -- Implied
         case 0xEA => Cycles.add(return)
+
+        case _ =>
     }
 
     private def fetchOpcode(): Unit = {
@@ -77,6 +116,7 @@ class CPU(memory: Memory) {
       * each time through the main loop.
       */ 
     def executeCycle(): Unit = {
+        println(f"$programCounter%04X: ${memory(programCounter)}%02X")
         if (Cycles.isOperationFinished()) {
             Cycles.clearStoredData()
             fetchOpcode()

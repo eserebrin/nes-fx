@@ -26,9 +26,10 @@ object Console extends JFXApp {
             // Main loop
             private var oldT = 0L
             val loop = AnimationTimer(t => {
-
+                
                 // regulate to 60 fps
-                if (t - oldT < 1e9 / 60) {
+                if (t - oldT > 1e9 / 60) {
+                // if (io.StdIn.readLine() == "") {
                     oldT = t
 
                     cpu.executeCycle()
