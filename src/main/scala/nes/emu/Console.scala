@@ -16,9 +16,10 @@ object Console extends JFXApp {
     val DisplayWidth = 256 * 2
     val DisplayHeight = 240 * 2
 
+    private val MasterClockSpeed = 21477272 // Hz
+
     // Emulator Info File logging setup
-    val FileLogPrintWriter = new PrintWriter(new File("log.txt"))
-    var fileLog = ""
+    // private var fileLog = ""
 
     // Create Emulator Components
     val memory = new Memory
@@ -31,15 +32,21 @@ object Console extends JFXApp {
             val canvas = new Canvas(DisplayWidth, DisplayHeight)
             content = canvas
             val g = canvas.graphicsContext2D
+            val args = parameters.raw.toArray
+
+            val IsDebugModeEnabled = args(0) == "debug"
 
             // TODO: Controller handling
             canvas.onKeyPressed = (e: KeyEvent) => e.code match {
 
-                // Power on / off
-                // TODO: power on
+                // Space -> step once (debug mode)
+                case KeyCode.Space => if (IsDebugModeEnabled) runDebugCycle()
+
+                // P -> Power off
                 case KeyCode.P => {
-                    FileLogPrintWriter.write(fileLog)
-                    FileLogPrintWriter.close()
+                    // val FileLogPrintWriter = new PrintWriter(new File("log.txt"))
+                    // FileLogPrintWriter.write(fileLog)
+                    // FileLogPrintWriter.close()
                     sys.exit()
                 }
 
@@ -47,23 +54,31 @@ object Console extends JFXApp {
             }
 
             // Main loop
-            private var oldT = 0L
+            var oldT = 0L
             val MainLoop = AnimationTimer(t => {
-                
-                // regulate to 60 fps
+                // Regulate main loop to 60 fps
                 if (t - oldT > 1e9 / 60) {
-                // if (io.StdIn.readLine() == "") {
+                    // Emulate clock speed
+                    for (i <- 1 to MasterClockSpeed / 60) {
+                        if (i % 12 == 0) {
+                            cpu.executeCycle()
+
+                            // TODO: rework file logger for efficiency and memory usage
+                            // println(cpu.createTextLogOutput())
+                        }
+                    }
                     oldT = t
-
-                    cpu.executeCycle()
-                    fileLog += cpu.createTextLogOutput()
                 }
-
             })
 
-            MainLoop.start()
-            canvas.requestFocus()
+            // Debug cycle
+            def runDebugCycle(): Unit = {
+                cpu.executeCycle()
+                println(cpu.createTextLogOutput())
+            }
 
+            canvas.requestFocus()
+            if (!IsDebugModeEnabled) MainLoop.start()
         }
     } 
 
