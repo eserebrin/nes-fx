@@ -9,8 +9,9 @@ class Memory {
     private var self = ram ++ cartridge
 
 
-    // TESTING
-    self(0x0000) = 0x6C
+    /* --- TESTING 123 123 --- */
+
+    self(0x0000) = 0xAD
     self(0x0001) = 0x34
     self(0x0002) = 0x12
     self(0x1234) = 0x99

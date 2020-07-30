@@ -61,10 +61,9 @@ object Console extends JFXApp {
                     // Emulate clock speed
                     for (i <- 1 to MasterClockSpeed / 60) {
                         if (i % 12 == 0) {
-                            cpu.executeCycle()
-
                             // TODO: rework file logger for efficiency and memory usage
                             // println(cpu.createTextLogOutput())
+                            cpu.executeCycle()
                         }
                     }
                     oldT = t
@@ -73,8 +72,8 @@ object Console extends JFXApp {
 
             // Debug cycle
             def runDebugCycle(): Unit = {
-                cpu.executeCycle()
                 println(cpu.createTextLogOutput())
+                cpu.executeCycle()
             }
 
             canvas.requestFocus()

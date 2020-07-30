@@ -14,7 +14,11 @@ class CPU(memory: Memory) {
 
 
     // Flags
+    private val CarryFlagMask = 1
     private val ZeroFlagMask = 1 << 1
+    private val InterruptDisableFlagMask = 1 << 2
+    private val DecimalFlagMask = 1 << 3
+    private val OverflowFlagMask = 1 << 6
     private val NegativeFlagMask = 1 << 7
 
     // Total number of CPU cycles run since power on
@@ -41,23 +45,24 @@ class CPU(memory: Memory) {
 
     def createTextLogOutput(): String = {
         f"""
-            |---------------------------------------
-            |              CPU (Cycle ${cycleCount}%d)
-            |---------------------------------------
-            |=== Registers ===
+            |----------------------
+            | CPU (Cycle ${cycleCount}%d)
+            |----------------------
+            |  === Registers ===
             |Program Counter: ${programCounter}%04X
             |Data:            ${memory(programCounter)}%02X
             |Accumulator:     ${accumulator}%02X
             |Index X:         ${xIndex}%02X
             |Index Y:         ${yIndex}%02X
             |Stack Pointer:   ${stackPointer}%02X
-            |=== Status ===
-            |Negative: ${(status & NegativeFlagMask) >> 1}%1d
-            |Overflow:
-            |Decimal:
-            |Interrupt Disable:
-            |Zero: ${(status & ZeroFlagMask) >> 7}%1d
-            |Carry:
+            |  === Status ===
+            |Negative: ${(status & NegativeFlagMask) >> 7}%1d
+            |Overflow: ${(status & OverflowFlagMask) >> 6}%1d
+            |Decimal: ${(status & DecimalFlagMask) >> 3}%1d
+            |Interrupt Disable: ${(status & InterruptDisableFlagMask) >> 2}%1d
+            |Zero: ${(status & ZeroFlagMask) >> 1}%1d
+            |Carry: ${status & CarryFlagMask}%1d
+            |----------------------
          """.stripMargin('|')
     }
 
@@ -84,9 +89,11 @@ class CPU(memory: Memory) {
 
     /* ------ Flag updating methods ------ */
 
+    // TODO: look into beter flag masking options
+
     private def updateZeroFlag(register: Int): Unit = {
         if (register == 0) status |= ZeroFlagMask
-        else status |= ~ZeroFlagMask
+        else status &= 0xFD // 11111101
     }
 
     private def updateNegativeFlag(register: Int): Unit = {
@@ -126,6 +133,8 @@ class CPU(memory: Memory) {
 
     private def startOperation(opcode: Int): Unit = opcode match {
 
+        /* ------- JMP ------- */
+
         // JMP -- Absolute
         case 0x4C => {
             Cycles.add(fetchNextByte)
@@ -140,12 +149,13 @@ class CPU(memory: Memory) {
         case 0x6C => {
             Cycles.add(fetchNextByte)
             Cycles.add(fetchNextByte)
-            // TODO: page boundary bug
             Cycles.add(fetchNextByteFromAddress)
             Cycles.add(() => {
                 programCounter = Cycles.getNextStoredByte()
             })
         }
+
+        /* ------- LDA ------- */
 
         // LDA -- Immediate
         case 0xA9 => {
@@ -175,9 +185,72 @@ class CPU(memory: Memory) {
                 Cycles.storeByte(Address)
             })
             Cycles.add(() => {
-                accumulator = Cycles.getNextStoredByte()
+                accumulator = memory(Cycles.getNextStoredByte())
                 updateZeroFlag(accumulator)
                 updateNegativeFlag(accumulator)
+            })
+        }
+
+        // LDA -- Absolute
+        case 0xAD => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val AddressLowByte = Cycles.getNextStoredByte()
+                val AddressHighByte = Cycles.getNextStoredByte() << 8
+                accumulator = AddressHighByte | AddressLowByte
+                updateZeroFlag(accumulator)
+                updateNegativeFlag(accumulator)
+            })
+        }
+
+        /* ------- LDX ------- */
+
+        // LDX -- Immediate
+        case 0xA2 => {
+            Cycles.add(() => {
+                xIndex = memory(programCounter)
+                programCounter += 1
+                updateZeroFlag(xIndex)
+                updateNegativeFlag(xIndex)
+            })
+        }
+
+        // LDX -- Absolute
+        case 0xAE => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val AddressLowByte = Cycles.getNextStoredByte()
+                val AddressHighByte = Cycles.getNextStoredByte() << 8
+                xIndex = AddressHighByte | AddressLowByte
+                updateZeroFlag(xIndex)
+                updateNegativeFlag(yIndex)
+            })
+        }
+
+        /* ------- LDY ------- */
+
+        // LDY -- Immediate
+        case 0xA0 => {
+            Cycles.add(() => {
+                yIndex = memory(programCounter)
+                programCounter += 1
+                updateZeroFlag(yIndex)
+                updateNegativeFlag(yIndex)
+            })
+        }
+
+        // LDY -- Absolute
+        case 0xAC => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val AddressLowByte = Cycles.getNextStoredByte()
+                val AddressHighByte = Cycles.getNextStoredByte() << 8
+                yIndex = AddressHighByte | AddressLowByte
+                updateZeroFlag(yIndex)
+                updateNegativeFlag(yIndex)
             })
         }
 
