@@ -39,6 +39,7 @@ class CPU(memory: Memory) {
 
         def storeByte(byte: Int): Unit = storedData += byte
         def getNextStoredByte(): Int = storedData.remove(0)
+        def peekNextStoredByte(): Int = storedData(0)
         def clearStoredData(): Unit = storedData = mutable.Buffer[Int]()
 
     }
@@ -74,7 +75,7 @@ class CPU(memory: Memory) {
         programCounter += 1
     }
 
-    private def fetchNextByteFromAddress(): Unit = {
+    private def fetchByteIndirect(): Unit = {
         val PointerLowByte = Cycles.getNextStoredByte()
         var pointerHighByte = Cycles.getNextStoredByte()
 
@@ -101,13 +102,9 @@ class CPU(memory: Memory) {
         status |= NewNegativeFlag
     }
 
-    // private def fetchAddress(): Int = {
-    //     Cycles.add(fetchNextByte)
-    //     Cycles.add(fetchNextByte)
-    //     val lowByte = Cycles.getNextStoredByte()
-    //     val highByte = Cycles.getNextStoredByte() << 8
-    //     highByte | lowByte
-    // }
+    private def updateCarryFlag(register: Int): Unit = {
+        ???
+    }
 
 
     /* ------ Main CPU operation methods ------ */
@@ -131,7 +128,10 @@ class CPU(memory: Memory) {
         startOperation(Opcode)
     }
 
+
+    // WARNING!!! Opcodes ahead
     private def startOperation(opcode: Int): Unit = opcode match {
+
 
         /* ------- JMP ------- */
 
@@ -149,11 +149,12 @@ class CPU(memory: Memory) {
         case 0x6C => {
             Cycles.add(fetchNextByte)
             Cycles.add(fetchNextByte)
-            Cycles.add(fetchNextByteFromAddress)
+            Cycles.add(fetchByteIndirect)
             Cycles.add(() => {
                 programCounter = Cycles.getNextStoredByte()
             })
         }
+
 
         /* ------- LDA ------- */
 
@@ -204,6 +205,108 @@ class CPU(memory: Memory) {
             })
         }
 
+        // LDA -- Abslolute, X
+        case 0xBD => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val AddressLowByte = Cycles.getNextStoredByte()
+                val AddressHighByte = Cycles.getNextStoredByte() << 8
+                val Address = (AddressHighByte | AddressLowByte) + xIndex
+
+                // Extra cycle needed if page boundary crossed
+                if (AddressLowByte + xIndex < 0x100) {
+                    accumulator = memory(Address)
+                    updateZeroFlag(accumulator)
+                    updateNegativeFlag(accumulator)
+                }
+                else Cycles.add(() => {
+                    accumulator = memory(Address)
+                    updateZeroFlag(accumulator)
+                    updateNegativeFlag(accumulator)
+                })
+
+            })
+        }
+
+        // LDA -- Abslolute, Y
+        case 0xB9 => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val AddressLowByte = Cycles.getNextStoredByte()
+                val AddressHighByte = Cycles.getNextStoredByte() << 8
+                val Address = (AddressHighByte | AddressLowByte) + yIndex
+
+                // Extra cycle needed if page boundary crossed
+                if (AddressLowByte + yIndex < 0x100) {
+                    accumulator = memory(Address)
+                    updateZeroFlag(accumulator)
+                    updateNegativeFlag(accumulator)
+                }
+                else Cycles.add(() => {
+                    accumulator = memory(Address)
+                    updateZeroFlag(accumulator)
+                    updateNegativeFlag(accumulator)
+                })
+
+            })
+        }
+
+        // LDA -- (Indirect, X)
+        case 0xA1 => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                Cycles.storeByte((Cycles.getNextStoredByte() + xIndex) & 0xFF)
+            })
+            Cycles.add(() => {
+                val Pointer = Cycles.peekNextStoredByte()
+                Cycles.storeByte(memory(Pointer))
+            })
+            Cycles.add(() => {
+                val Pointer = Cycles.getNextStoredByte()
+                Cycles.storeByte(memory(Pointer + 1))
+            })
+            Cycles.add(() => {
+                val AddressLowByte = Cycles.getNextStoredByte()
+                val AddressHighByte = Cycles.getNextStoredByte() << 8
+                accumulator = memory(AddressHighByte | AddressLowByte)
+                updateZeroFlag(accumulator)
+                updateNegativeFlag(accumulator)
+            })
+        }
+
+        // LDA -- (Indirect), Y
+        case 0xB1 => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val Pointer = Cycles.peekNextStoredByte()
+                Cycles.storeByte(memory(Pointer))
+            })
+            Cycles.add(() => {
+                val Pointer = Cycles.getNextStoredByte()
+                Cycles.storeByte(memory(Pointer + 1))
+            })
+            Cycles.add(() => {
+                val AddressLowByte = Cycles.getNextStoredByte()
+                val AddressHighByte = Cycles.getNextStoredByte() << 8
+                val Address = (AddressHighByte | AddressLowByte) + yIndex
+
+                // Extra cycle needed if page boundary crossed
+                if (AddressLowByte + yIndex < 0x100) {
+                    accumulator = memory(Address)
+                    updateZeroFlag(accumulator)
+                    updateNegativeFlag(accumulator)
+                }
+                else Cycles.add(() => {
+                    accumulator = memory(Address)
+                    updateZeroFlag(accumulator)
+                    updateNegativeFlag(accumulator)
+                })
+            })
+        }
+
+
         /* ------- LDX ------- */
 
         // LDX -- Immediate
@@ -211,6 +314,30 @@ class CPU(memory: Memory) {
             Cycles.add(() => {
                 xIndex = memory(programCounter)
                 programCounter += 1
+                updateZeroFlag(xIndex)
+                updateNegativeFlag(xIndex)
+            })
+        }
+
+        // LDX -- Zero Page
+        case 0xA6 => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                xIndex = memory(Cycles.getNextStoredByte())
+                updateZeroFlag(xIndex)
+                updateNegativeFlag(xIndex)
+            })
+        }
+
+        // LDX -- Zero Page, Y
+        case 0xB6 => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val Address = (Cycles.getNextStoredByte() + yIndex) & 0xFF
+                Cycles.storeByte(Address)
+            })
+            Cycles.add(() => {
+                xIndex = memory(Cycles.getNextStoredByte())
                 updateZeroFlag(xIndex)
                 updateNegativeFlag(xIndex)
             })
@@ -229,6 +356,31 @@ class CPU(memory: Memory) {
             })
         }
 
+        // LDX -- Abslolute, Y
+        case 0xBE => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val AddressLowByte = Cycles.getNextStoredByte()
+                val AddressHighByte = Cycles.getNextStoredByte() << 8
+                val Address = (AddressHighByte | AddressLowByte) + yIndex
+
+                // Extra cycle needed if page boundary crossed
+                if (AddressLowByte + yIndex < 0x100) {
+                    xIndex = memory(Address)
+                    updateZeroFlag(xIndex)
+                    updateNegativeFlag(xIndex)
+                }
+                else Cycles.add(() => {
+                    xIndex = memory(Address)
+                    updateZeroFlag(xIndex)
+                    updateNegativeFlag(xIndex)
+                })
+
+            })
+        }
+
+
         /* ------- LDY ------- */
 
         // LDY -- Immediate
@@ -236,6 +388,30 @@ class CPU(memory: Memory) {
             Cycles.add(() => {
                 yIndex = memory(programCounter)
                 programCounter += 1
+                updateZeroFlag(yIndex)
+                updateNegativeFlag(yIndex)
+            })
+        }
+
+        // LDY -- Zero Page
+        case 0xA4 => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                yIndex = memory(Cycles.getNextStoredByte())
+                updateZeroFlag(yIndex)
+                updateNegativeFlag(yIndex)
+            })
+        }
+
+        // LDY -- Zero Page, X
+        case 0xB4 => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val Address = (Cycles.getNextStoredByte() + xIndex) & 0xFF
+                Cycles.storeByte(Address)
+            })
+            Cycles.add(() => {
+                yIndex = memory(Cycles.getNextStoredByte())
                 updateZeroFlag(yIndex)
                 updateNegativeFlag(yIndex)
             })
@@ -253,6 +429,31 @@ class CPU(memory: Memory) {
                 updateNegativeFlag(yIndex)
             })
         }
+
+        // LDY -- Abslolute, X
+        case 0xBC => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val AddressLowByte = Cycles.getNextStoredByte()
+                val AddressHighByte = Cycles.getNextStoredByte() << 8
+                val Address = (AddressHighByte | AddressLowByte) + xIndex
+
+                // Extra cycle needed if page boundary crossed
+                if (AddressLowByte + xIndex < 0x100) {
+                    yIndex = memory(Address)
+                    updateZeroFlag(yIndex)
+                    updateNegativeFlag(yIndex)
+                }
+                else Cycles.add(() => {
+                    yIndex = memory(Address)
+                    updateZeroFlag(yIndex)
+                    updateNegativeFlag(yIndex)
+                })
+
+            })
+        }
+
 
         // NOP -- Implied
         case 0xEA => Cycles.add(return)
