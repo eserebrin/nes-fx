@@ -11,13 +11,8 @@ class Memory {
 
     /* --- TESTING 123 123 --- */
 
-    self(0x0000) = 0xA0
-    self(0x0001) = 0x02 // LDY #$02
-    self(0x0002) = 0xB1
-    self(0x0003) = 0xFF // LDA ($FC),Y
-    self(0x00FF) = 0x34
-    self(0x0100) = 0x12
-    self(0x1236) = 0x99
+    self(0x0000) = 0xA9
+    self(0x0001) = 0x02 // LDA #$02
 
     def apply(pointer: Int): Int = self(pointer)
 
