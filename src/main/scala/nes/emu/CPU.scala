@@ -84,18 +84,42 @@ class CPU(memory: Memory) {
     }
 
     private def startOperation(opcode: Int): Unit = opcode match {
-        // case 0x69 => createOperationImmediate(adc)
-        // case 0x65 => createOperationZeroPage(adc)
-        // case 0x75 => createOperationZeroPageIndexed(adc, xIndex)
-        // case 0x6D => createOperationAbsolute(adc)
-        // case 0x7D => createOperationAbsoluteIndexed(adc, xIndex)
-        // case 0x79 => createOperationAbsoluteIndexed(adc, yIndex)
-        // case 0x61 => createOperationIndexedIndirect(adc)
-        // case 0x71 => createOperationIndirectIndexed(adc)
 
+        // ADC (Add with carry)
+        case 0x69 => createOperationImmediate(adc)
+        case 0x65 => createOperationZeroPage(adc)
+        case 0x75 => createOperationZeroPageIndexed(adc, xIndex)
+        case 0x6D => createOperationAbsolute(adc)
+        case 0x7D => createOperationAbsoluteIndexed(adc, xIndex)
+        case 0x79 => createOperationAbsoluteIndexed(adc, yIndex)
+        case 0x61 => createOperationIndexedIndirect(adc)
+        case 0x71 => createOperationIndirectIndexed(adc)
+
+        // AND (Logical AND)
+        case 0x29 => createOperationImmediate(and)
+        case 0x25 => createOperationZeroPage(and)
+        case 0x35 => createOperationZeroPageIndexed(and, xIndex)
+        case 0x2D => createOperationAbsolute(and)
+        case 0x3D => createOperationAbsoluteIndexed(and, xIndex)
+        case 0x39 => createOperationAbsoluteIndexed(and, yIndex)
+        case 0x21 => createOperationIndexedIndirect(and)
+        case 0x31 => createOperationIndirectIndexed(and)
+
+        // TODO
+        // TODO: Read-Modify-Write operation creation
+        // TODO
+        // ASL (Arithmetic Shift Left)
+        case 0x0A => createOperationAccumulator(asl)
+        case 0x06 => createOperationZeroPage(asl)
+        case 0x16 => createOperationZeroPageIndexed(asl, xIndex)
+        case 0x0E => createOperationAbsolute(asl)
+        case 0x1E => createOperationAbsoluteIndexed(asl, xIndex)
+
+        // JMP (Jump)
         case 0x4C => createOperationAbsolute3Cycle(jmp)
         case 0x6C => createOperationIndirect(jmp)
 
+        // LDA (Load accumulator)
         case 0xA9 => createOperationImmediate(lda)
         case 0xA5 => createOperationZeroPage(lda)
         case 0xB5 => createOperationZeroPageIndexed(lda, xIndex)
@@ -105,21 +129,25 @@ class CPU(memory: Memory) {
         case 0xA1 => createOperationIndexedIndirect(lda)
         case 0xB1 => createOperationIndirectIndexed(lda)
 
+        // LDA (Load X register)
         case 0xA2 => createOperationImmediate(ldx)
         case 0xA6 => createOperationZeroPage(ldx)
         case 0xB6 => createOperationZeroPageIndexed(ldx, yIndex)
         case 0xAE => createOperationAbsolute(ldx)
         case 0xBE => createOperationAbsoluteIndexed(ldx, yIndex)
 
+        // LDA (Load Y register)
         case 0xA0 => createOperationImmediate(ldy)
         case 0xA4 => createOperationZeroPage(ldy)
         case 0xB4 => createOperationZeroPageIndexed(ldy, xIndex)
         case 0xAC => createOperationAbsolute(ldy)
         case 0xBC => createOperationAbsoluteIndexed(ldy, xIndex)
 
+        // NOP (No operation)
         case 0xEA => createOperationImplied(nop)
 
         case _ =>
+
     }
 
 
@@ -160,7 +188,9 @@ class CPU(memory: Memory) {
 
     /* ------ Operation creation methods ------ */
 
-    private def createOperationImplied(operation: () => Unit): Unit = operation()
+    private def createOperationImplied(operation: () => Unit): Unit = Cycles.add(operation)
+
+    private def createOperationAccumulator(operation: () => Unit): Unit = Cycles.add(operation)
 
     private def createOperationImmediate(operation: Int => Unit): Unit = {
         Cycles.add(() => {
@@ -269,14 +299,51 @@ class CPU(memory: Memory) {
 
     /* ------- Opcodes ------- */
 
-    // private def adc(data: Int): Unit = {
-    //     accumulator += data
-    //     accumulator += status & CarryFlagMask
-    //     updateCarryFlag(accumulator)
-    //     updateZeroFlag(accumulator)
-    //     updateOverflowFlag(accumulator)
-    //     updateNegativeFlag(accumulator)
-    // }
+    private def adc(data: Int): Unit = {
+        val PreviousSignBit = accumulator & NegativeFlagMask
+
+        accumulator += data
+        accumulator += status & CarryFlagMask
+
+        // Update Carry flag
+        val NewCarryFlag = (accumulator & 0x100) >> 8
+        accumulator &= 0xFF
+        status |= NewCarryFlag
+
+        // Update Overflow flag
+        if ((accumulator & NegativeFlagMask) != PreviousSignBit) status |= OverflowFlagMask
+        else status &= 0xBF // 10111111
+
+        updateZeroFlag(accumulator)
+        updateNegativeFlag(accumulator)
+    }
+
+    private def and(data: Int): Unit = {
+        accumulator &= data
+        updateZeroFlag(accumulator)
+        updateNegativeFlag(accumulator)
+    }
+
+    // Overloaded no argument version (Accumulator)
+    private def asl(): Unit = {
+        // Set Carry flag to previous bit 7
+        status |= ((accumulator & NegativeFlagMask) >> 7)
+
+        accumulator <<= 1
+
+        updateZeroFlag(accumulator)
+        updateNegativeFlag(accumulator)
+    }
+
+    private def asl(data: Int): Unit = {
+        // Set Carry flag to previous bit 7
+        status |= ((memory(data) & NegativeFlagMask) >> 7)
+
+        memory(data) <<= 1
+
+        updateZeroFlag(memory(data))
+        updateNegativeFlag(memory(data))
+    }
 
     private def jmp(data: Int): Unit = programCounter = data
 
