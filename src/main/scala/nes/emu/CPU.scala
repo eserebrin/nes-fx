@@ -41,6 +41,24 @@ class CPU(memory: Memory) {
     // Total number of CPU cycles run since power on
     private var cycleCount = 0L
 
+    private object OperationType extends Enumeration {
+        type T = Value
+        val Read, ReadModifyWrite, Write, Other = Value
+    }
+
+    private object AddressingMode extends Enumeration {
+        type T = Value
+        val Implied = Value
+        val Accumulator = Value
+        val Immediate = Value
+        val ZeroPage = Value
+        val ZeroPageIndexed = Value
+        val Absolute = Value
+        val AbsoluteIndexed = Value
+        val Indirect = Value
+        val IndexedIndirect = Value
+        val IndirectIndexed = Value
+    }
 
     /* ------ Main CPU operation methods ------ */
 
@@ -86,65 +104,62 @@ class CPU(memory: Memory) {
     private def startOperation(opcode: Int): Unit = opcode match {
 
         // ADC (Add with carry)
-        case 0x69 => createOperationImmediate(adc)
-        case 0x65 => createOperationZeroPage(adc)
-        case 0x75 => createOperationZeroPageIndexed(adc, xIndex)
-        case 0x6D => createOperationAbsolute(adc)
-        case 0x7D => createOperationAbsoluteIndexed(adc, xIndex)
-        case 0x79 => createOperationAbsoluteIndexed(adc, yIndex)
-        case 0x61 => createOperationIndexedIndirect(adc)
-        case 0x71 => createOperationIndirectIndexed(adc)
+        case 0x69 => createOperation(AddressingMode.Immediate, OperationType.Read, adc)
+        case 0x65 => createOperation(AddressingMode.ZeroPage, OperationType.Read, adc)
+        case 0x75 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.Read, adc, xIndex)
+        case 0x6D => createOperation(AddressingMode.Absolute, OperationType.Read, adc)
+        case 0x7D => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, adc, xIndex)
+        case 0x79 => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, adc, yIndex)
+        case 0x61 => createOperation(AddressingMode.IndexedIndirect, OperationType.Read, adc)
+        case 0x71 => createOperation(AddressingMode.IndirectIndexed, OperationType.Read, adc)
 
         // AND (Logical AND)
-        case 0x29 => createOperationImmediate(and)
-        case 0x25 => createOperationZeroPage(and)
-        case 0x35 => createOperationZeroPageIndexed(and, xIndex)
-        case 0x2D => createOperationAbsolute(and)
-        case 0x3D => createOperationAbsoluteIndexed(and, xIndex)
-        case 0x39 => createOperationAbsoluteIndexed(and, yIndex)
-        case 0x21 => createOperationIndexedIndirect(and)
-        case 0x31 => createOperationIndirectIndexed(and)
+        case 0x29 => createOperation(AddressingMode.Immediate, OperationType.Read, and)
+        case 0x25 => createOperation(AddressingMode.ZeroPage, OperationType.Read, and)
+        case 0x35 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.Read, and, xIndex)
+        case 0x2D => createOperation(AddressingMode.Absolute, OperationType.Read, and)
+        case 0x3D => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, and, xIndex)
+        case 0x39 => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, and, yIndex)
+        case 0x21 => createOperation(AddressingMode.IndexedIndirect, OperationType.Read, and)
+        case 0x31 => createOperation(AddressingMode.IndirectIndexed, OperationType.Read, and)
 
-        // TODO
-        // TODO: Read-Modify-Write operation creation
-        // TODO
         // ASL (Arithmetic Shift Left)
-        case 0x0A => createOperationAccumulator(asl)
-        case 0x06 => createOperationZeroPage(asl)
-        case 0x16 => createOperationZeroPageIndexed(asl, xIndex)
-        case 0x0E => createOperationAbsolute(asl)
-        case 0x1E => createOperationAbsoluteIndexed(asl, xIndex)
+        case 0x0A => createOperation(AddressingMode.Accumulator, OperationType.ReadModifyWrite, asl)
+        case 0x06 => createOperation(AddressingMode.ZeroPage, OperationType.ReadModifyWrite, asl)
+        case 0x16 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.ReadModifyWrite, asl, xIndex)
+        case 0x0E => createOperation(AddressingMode.Absolute, OperationType.ReadModifyWrite, asl)
+        case 0x1E => createOperation(AddressingMode.AbsoluteIndexed, OperationType.ReadModifyWrite, asl, xIndex)
 
         // JMP (Jump)
-        case 0x4C => createOperationAbsolute3Cycle(jmp)
-        case 0x6C => createOperationIndirect(jmp)
+        case 0x4C => createOperation(AddressingMode.Absolute, OperationType.Other, jmp)
+        case 0x6C => createOperation(AddressingMode.Indirect, OperationType.Other, jmp)
 
         // LDA (Load accumulator)
-        case 0xA9 => createOperationImmediate(lda)
-        case 0xA5 => createOperationZeroPage(lda)
-        case 0xB5 => createOperationZeroPageIndexed(lda, xIndex)
-        case 0xAD => createOperationAbsolute(lda)
-        case 0xBD => createOperationAbsoluteIndexed(lda, xIndex)
-        case 0xB9 => createOperationAbsoluteIndexed(lda, yIndex)
-        case 0xA1 => createOperationIndexedIndirect(lda)
-        case 0xB1 => createOperationIndirectIndexed(lda)
+        case 0xA9 => createOperation(AddressingMode.Immediate, OperationType.Read, lda)
+        case 0xA5 => createOperation(AddressingMode.ZeroPage, OperationType.Read, lda)
+        case 0xB5 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.Read, lda, xIndex)
+        case 0xAD => createOperation(AddressingMode.Absolute, OperationType.Read, lda)
+        case 0xBD => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, lda, xIndex)
+        case 0xB9 => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, lda, yIndex)
+        case 0xA1 => createOperation(AddressingMode.IndexedIndirect, OperationType.Read, lda)
+        case 0xB1 => createOperation(AddressingMode.IndirectIndexed, OperationType.Read, lda)
 
         // LDA (Load X register)
-        case 0xA2 => createOperationImmediate(ldx)
-        case 0xA6 => createOperationZeroPage(ldx)
-        case 0xB6 => createOperationZeroPageIndexed(ldx, yIndex)
-        case 0xAE => createOperationAbsolute(ldx)
-        case 0xBE => createOperationAbsoluteIndexed(ldx, yIndex)
+        case 0xA2 => createOperation(AddressingMode.Immediate, OperationType.Read, ldx)
+        case 0xA6 => createOperation(AddressingMode.ZeroPage, OperationType.Read, ldx)
+        case 0xB6 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.Read, ldx, yIndex)
+        case 0xAE => createOperation(AddressingMode.Absolute, OperationType.Read, ldx)
+        case 0xBE => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, ldx, yIndex)
 
         // LDA (Load Y register)
-        case 0xA0 => createOperationImmediate(ldy)
-        case 0xA4 => createOperationZeroPage(ldy)
-        case 0xB4 => createOperationZeroPageIndexed(ldy, xIndex)
-        case 0xAC => createOperationAbsolute(ldy)
-        case 0xBC => createOperationAbsoluteIndexed(ldy, xIndex)
+        case 0xA0 => createOperation(AddressingMode.Immediate, OperationType.Read, ldy)
+        case 0xA4 => createOperation(AddressingMode.ZeroPage, OperationType.Read, ldy)
+        case 0xB4 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.Read, ldy, xIndex)
+        case 0xAC => createOperation(AddressingMode.Absolute, OperationType.Read, ldy)
+        case 0xBC => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, ldy, xIndex)
 
         // NOP (No operation)
-        case 0xEA => createOperationImplied(nop)
+        case 0xEA => createOperation(AddressingMode.Implied, OperationType.Other, nop)
 
         case _ =>
 
@@ -186,116 +201,132 @@ class CPU(memory: Memory) {
     // }
 
 
-    /* ------ Operation creation methods ------ */
+    private def createOperation(
+        addressingMode: AddressingMode.T,
+        operationType: OperationType.T,
 
-    private def createOperationImplied(operation: () => Unit): Unit = Cycles.add(operation)
+        // TODO: somehow do a union for this?
+        operation: Either[Int, ()] => Unit,
 
-    private def createOperationAccumulator(operation: () => Unit): Unit = Cycles.add(operation)
+        index: Int = 0
+    ): Unit = addressingMode match {
 
-    private def createOperationImmediate(operation: Int => Unit): Unit = {
-        Cycles.add(() => {
-            operation(memory(programCounter))
-            programCounter += 1
-        })
+        case AddressingMode.Implied => Cycles.add(() => operation(0))
+
+        case AddressingMode.Accumulator => Cycles.add(() => operation(0))
+
+        case AddressingMode.Immediate => {
+            Cycles.add(() => {
+                operation(memory(programCounter))
+                programCounter += 1
+            })
+        }
+
+        case AddressingMode.ZeroPage => {
+            Cycles.add(fetchNextByte)
+            if (operationType == OperationType.ReadModifyWrite) {
+                Cycles.add(() => Cycles.storeByte(memory(Cycles.getNextStoredByte())))
+                Cycles.add(return) // Delay one cycle to get correct 5 cycle operation.
+                Cycles.add(() => operation(Cycles.getNextStoredByte()))
+            }
+            else Cycles.add(() => operation(memory(Cycles.getNextStoredByte())))
+        }
+
+        case AddressingMode.ZeroPageIndexed => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val Address = (Cycles.getNextStoredByte() + index) & 0xFF
+                Cycles.storeByte(Address)
+            })
+            Cycles.add(() => operation(memory(Cycles.getNextStoredByte())))
+        }
+
+        case AddressingMode.Absolute => {
+            if (operationType == OperationType.Other) { // JMP
+                Cycles.add(fetchNextByte)
+                Cycles.add(() => {
+                    val AddressLowByte = Cycles.getNextStoredByte()
+                    val AddressHighByte = memory(programCounter) << 8
+                    operation(AddressHighByte | AddressLowByte)
+                })
+            } else {
+                Cycles.add(fetchNextByte)
+                Cycles.add(fetchNextByte)
+                Cycles.add(() => operation(getStoredAddress()))
+            }
+        }
+
+        case AddressingMode.AbsoluteIndexed => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val AddressLowByte = Cycles.getNextStoredByte()
+                val AddressHighByte = Cycles.getNextStoredByte() << 8
+                val Address = (AddressHighByte | AddressLowByte) + index
+
+                // Extra cycle needed if page boundary crossed
+                if (AddressLowByte + index < 0x100) operation(memory(Address))
+                else Cycles.add(() => operation(memory(Address)))
+            })
+        }
+
+        case AddressingMode.Indirect => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val PointerLowByte = Cycles.getNextStoredByte()
+                var pointerHighByte = Cycles.getNextStoredByte()
+
+                // Replicate page boundary bug:
+                if ((pointerHighByte & 0xFF) == 0xFF) pointerHighByte = 0
+                else pointerHighByte <<= 8
+
+                val Pointer = pointerHighByte | PointerLowByte
+                Cycles.storeByte(memory(Pointer))
+            })
+            Cycles.add(() => programCounter = Cycles.getNextStoredByte())
+        }
+
+        case AddressingMode.IndexedIndirect => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                Cycles.storeByte((Cycles.getNextStoredByte() + xIndex) & 0xFF)
+            })
+            Cycles.add(() => {
+                val Pointer = Cycles.peekNextStoredByte()
+                Cycles.storeByte(memory(Pointer))
+            })
+            Cycles.add(() => {
+                val Pointer = Cycles.getNextStoredByte()
+                Cycles.storeByte(memory(Pointer + 1))
+            })
+            Cycles.add(() => operation(memory(getStoredAddress())))
+        }
+
+        case AddressingMode.IndirectIndexed => {
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val Pointer = Cycles.peekNextStoredByte()
+                Cycles.storeByte(memory(Pointer))
+            })
+            Cycles.add(() => {
+                val Pointer = Cycles.getNextStoredByte()
+                Cycles.storeByte(memory(Pointer + 1))
+            })
+            Cycles.add(() => {
+                val AddressLowByte = Cycles.getNextStoredByte()
+                val AddressHighByte = Cycles.getNextStoredByte() << 8
+                val Address = (AddressHighByte | AddressLowByte) + yIndex
+
+                // Extra cycle needed if page boundary crossed
+                if (AddressLowByte + yIndex < 0x100) operation(memory(Address))
+                else Cycles.add(() => operation(memory(Address)))
+            })
+        }
+
+        case _ =>
+
     }
-
-    private def createOperationZeroPage(operation: Int => Unit): Unit = {
-        Cycles.add(fetchNextByte)
-        Cycles.add(() => operation(memory(Cycles.getNextStoredByte())))
-    }
-
-    private def createOperationZeroPageIndexed(operation: Int => Unit, index: Int): Unit = {
-        Cycles.add(fetchNextByte)
-        Cycles.add(() => {
-            val Address = (Cycles.getNextStoredByte() + index) & 0xFF
-            Cycles.storeByte(Address)
-        })
-        Cycles.add(() => operation(memory(Cycles.getNextStoredByte())))
-    }
-
-    private def createOperationAbsolute(operation: Int => Unit): Unit = {
-        Cycles.add(fetchNextByte)
-        Cycles.add(fetchNextByte)
-        Cycles.add(() => operation(getStoredAddress()))
-    }
-
-    private def createOperationAbsolute3Cycle(operation: Int => Unit): Unit = {
-        Cycles.add(fetchNextByte)
-        Cycles.add(() => {
-            val AddressLowByte = Cycles.getNextStoredByte()
-            val AddressHighByte = memory(programCounter) << 8
-            operation(AddressHighByte | AddressLowByte)
-        })
-    }
-
-    private def createOperationAbsoluteIndexed(operation: Int => Unit, index: Int): Unit = {
-        Cycles.add(fetchNextByte)
-        Cycles.add(fetchNextByte)
-        Cycles.add(() => {
-            val AddressLowByte = Cycles.getNextStoredByte()
-            val AddressHighByte = Cycles.getNextStoredByte() << 8
-            val Address = (AddressHighByte | AddressLowByte) + index
-
-            // Extra cycle needed if page boundary crossed
-            if (AddressLowByte + index < 0x100) operation(memory(Address))
-            else Cycles.add(() => operation(memory(Address)))
-        })
-    }
-
-    private def createOperationIndirect(operation: Int => Unit): Unit = {
-        Cycles.add(fetchNextByte)
-        Cycles.add(fetchNextByte)
-        Cycles.add(() => {
-            val PointerLowByte = Cycles.getNextStoredByte()
-            var pointerHighByte = Cycles.getNextStoredByte()
-
-            // Replicate page boundary bug:
-            if ((pointerHighByte & 0xFF) == 0xFF) pointerHighByte = 0
-            else pointerHighByte <<= 8
-
-            val Pointer = pointerHighByte | PointerLowByte
-            Cycles.storeByte(memory(Pointer))
-        })
-        Cycles.add(() => programCounter = Cycles.getNextStoredByte())
-    }
-
-    private def createOperationIndexedIndirect(operation: Int => Unit): Unit = {
-        Cycles.add(fetchNextByte)
-        Cycles.add(() => {
-            Cycles.storeByte((Cycles.getNextStoredByte() + xIndex) & 0xFF)
-        })
-        Cycles.add(() => {
-            val Pointer = Cycles.peekNextStoredByte()
-            Cycles.storeByte(memory(Pointer))
-        })
-        Cycles.add(() => {
-            val Pointer = Cycles.getNextStoredByte()
-            Cycles.storeByte(memory(Pointer + 1))
-        })
-        Cycles.add(() => operation(memory(getStoredAddress())))
-    }
-
-    private def createOperationIndirectIndexed(operation: Int => Unit): Unit = {
-        Cycles.add(fetchNextByte)
-        Cycles.add(() => {
-            val Pointer = Cycles.peekNextStoredByte()
-            Cycles.storeByte(memory(Pointer))
-        })
-        Cycles.add(() => {
-            val Pointer = Cycles.getNextStoredByte()
-            Cycles.storeByte(memory(Pointer + 1))
-        })
-        Cycles.add(() => {
-            val AddressLowByte = Cycles.getNextStoredByte()
-            val AddressHighByte = Cycles.getNextStoredByte() << 8
-            val Address = (AddressHighByte | AddressLowByte) + yIndex
-
-            // Extra cycle needed if page boundary crossed
-            if (AddressLowByte + yIndex < 0x100) operation(memory(Address))
-            else Cycles.add(() => operation(memory(Address)))
-        })
-    }
-
 
     /* ------- Opcodes ------- */
 
@@ -365,7 +396,7 @@ class CPU(memory: Memory) {
         updateNegativeFlag(yIndex)
     }
 
-    private def nop(): Unit = {}
+    private def nop(data: Int): Unit = {}
 
 
 }
