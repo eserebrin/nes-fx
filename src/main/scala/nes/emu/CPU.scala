@@ -1,6 +1,7 @@
 package nes.emu
 
 import scala.collection.mutable
+import scalafx.collections.ObservableBuffer.Add
 
 class CPU(memory: Memory) {
 
@@ -9,8 +10,8 @@ class CPU(memory: Memory) {
     private var xIndex = 0
     private var yIndex = 0
     private var programCounter = 0
-    private var stackPointer = 0
-    private var status = 0
+    private var stackPointer = 0xFD
+    private var status = 0x34
 
     // Flags
     private val CarryFlagMask = 1
@@ -50,6 +51,7 @@ class CPU(memory: Memory) {
         type T = Value
         val Implied = Value
         val Accumulator = Value
+        val Relative = Value
         val Immediate = Value
         val ZeroPage = Value
         val ZeroPageIndexed = Value
@@ -204,136 +206,159 @@ class CPU(memory: Memory) {
     private def createOperation(
         addressingMode: AddressingMode.T,
         operationType: OperationType.T,
-
-        // TODO: somehow do a union for this?
-        operation: Either[Int, ()] => Unit,
-
+        operation: Option[Int] => Unit,
         index: Int = 0
-    ): Unit = addressingMode match {
+    ): Unit = {
+        addressingMode match {
 
-        case AddressingMode.Implied => Cycles.add(() => operation(0))
+            case AddressingMode.Implied => Cycles.add(() => operation(None))
 
-        case AddressingMode.Accumulator => Cycles.add(() => operation(0))
+            case AddressingMode.Accumulator => Cycles.add(() => operation(None))
+            
+            // case AddressingMode.Relative => {
+            //     Cycles.add(fetchNextByte)
+            //     Cycles.add(() => {
+            //         fetchNextByte()
 
-        case AddressingMode.Immediate => {
-            Cycles.add(() => {
-                operation(memory(programCounter))
-                programCounter += 1
-            })
-        }
+            //     })
+            // }
 
-        case AddressingMode.ZeroPage => {
-            Cycles.add(fetchNextByte)
-            if (operationType == OperationType.ReadModifyWrite) {
-                Cycles.add(() => Cycles.storeByte(memory(Cycles.getNextStoredByte())))
-                Cycles.add(return) // Delay one cycle to get correct 5 cycle operation.
-                Cycles.add(() => operation(Cycles.getNextStoredByte()))
+            case AddressingMode.Immediate => {
+                Cycles.add(() => {
+                    val Data = memory(programCounter)
+                    operation(Some(Data))
+                    programCounter += 1
+                })
             }
-            else Cycles.add(() => operation(memory(Cycles.getNextStoredByte())))
-        }
 
-        case AddressingMode.ZeroPageIndexed => {
-            Cycles.add(fetchNextByte)
-            Cycles.add(() => {
-                val Address = (Cycles.getNextStoredByte() + index) & 0xFF
-                Cycles.storeByte(Address)
-            })
-            Cycles.add(() => operation(memory(Cycles.getNextStoredByte())))
-        }
+            case AddressingMode.ZeroPage => {
+                Cycles.add(fetchNextByte)
+                if (operationType == OperationType.ReadModifyWrite) {
+                    Cycles.add(() => Cycles.storeByte(memory(Cycles.getNextStoredByte())))
+                    Cycles.add(return) // Delay one cycle to get correct 5 cycle operation.
+                    Cycles.add(() => {
+                        val Data = Cycles.getNextStoredByte()
+                        operation(Some(Data))
+                    })
+                }
+                else Cycles.add(() => {
+                    val Data = memory(Cycles.getNextStoredByte())
+                    operation(Some(Data))
+                })
+            }
 
-        case AddressingMode.Absolute => {
-            if (operationType == OperationType.Other) { // JMP
+            case AddressingMode.ZeroPageIndexed => {
+                Cycles.add(fetchNextByte)
+                Cycles.add(() => {
+                    val Address = (Cycles.getNextStoredByte() + index) & 0xFF
+                    Cycles.storeByte(Address)
+                })
+                Cycles.add(() => {
+                    val Data = memory(Cycles.getNextStoredByte())
+                    operation(Some(Data))
+                })
+            }
+
+            case AddressingMode.Absolute => {
+                if (operationType == OperationType.Other) { // JMP
+                    Cycles.add(fetchNextByte)
+                    Cycles.add(() => {
+                        val AddressLowByte = Cycles.getNextStoredByte()
+                        val AddressHighByte = memory(programCounter) << 8
+                        operation(Some(AddressHighByte | AddressLowByte))
+                    })
+                } else {
+                    Cycles.add(fetchNextByte)
+                    Cycles.add(fetchNextByte)
+                    Cycles.add(() => operation(Some(getStoredAddress())))
+                }
+            }
+
+            case AddressingMode.AbsoluteIndexed => {
+                Cycles.add(fetchNextByte)
                 Cycles.add(fetchNextByte)
                 Cycles.add(() => {
                     val AddressLowByte = Cycles.getNextStoredByte()
-                    val AddressHighByte = memory(programCounter) << 8
-                    operation(AddressHighByte | AddressLowByte)
+                    val AddressHighByte = Cycles.getNextStoredByte() << 8
+                    val Address = (AddressHighByte | AddressLowByte) + index
+                    val Data = Some(memory(Address))
+
+                    // Extra cycle needed if page boundary crossed
+                    if (AddressLowByte + index < 0x100) operation(Data)
+                    else Cycles.add(() => operation(Data))
                 })
-            } else {
-                Cycles.add(fetchNextByte)
-                Cycles.add(fetchNextByte)
-                Cycles.add(() => operation(getStoredAddress()))
             }
+
+            // JMP Only
+            case AddressingMode.Indirect => {
+                Cycles.add(fetchNextByte)
+                Cycles.add(fetchNextByte)
+                Cycles.add(() => {
+                    val PointerLowByte = Cycles.getNextStoredByte()
+                    var pointerHighByte = Cycles.getNextStoredByte()
+
+                    // Replicate page boundary bug:
+                    if ((pointerHighByte & 0xFF) == 0xFF) pointerHighByte = 0
+                    else pointerHighByte <<= 8
+
+                    val Pointer = pointerHighByte | PointerLowByte
+                    Cycles.storeByte(memory(Pointer))
+                })
+                Cycles.add(() => programCounter = Cycles.getNextStoredByte())
+            }
+
+            case AddressingMode.IndexedIndirect => {
+                Cycles.add(fetchNextByte)
+                Cycles.add(() => {
+                    Cycles.storeByte((Cycles.getNextStoredByte() + xIndex) & 0xFF)
+                })
+                Cycles.add(() => {
+                    val Pointer = Cycles.peekNextStoredByte()
+                    Cycles.storeByte(memory(Pointer))
+                })
+                Cycles.add(() => {
+                    val Pointer = Cycles.getNextStoredByte()
+                    Cycles.storeByte(memory(Pointer + 1))
+                })
+                Cycles.add(() => {
+                    val Data = memory(getStoredAddress())
+                    operation(Some(Data))
+                })
+            }
+
+            case AddressingMode.IndirectIndexed => {
+                Cycles.add(fetchNextByte)
+                Cycles.add(() => {
+                    val Pointer = Cycles.peekNextStoredByte()
+                    Cycles.storeByte(memory(Pointer))
+                })
+                Cycles.add(() => {
+                    val Pointer = Cycles.getNextStoredByte()
+                    Cycles.storeByte(memory(Pointer + 1))
+                })
+                Cycles.add(() => {
+                    val AddressLowByte = Cycles.getNextStoredByte()
+                    val AddressHighByte = Cycles.getNextStoredByte() << 8
+                    val Address = (AddressHighByte | AddressLowByte) + yIndex
+                    val Data = Some(memory(Address))
+
+                    // Extra cycle needed if page boundary crossed
+                    if (AddressLowByte + yIndex < 0x100) operation(Data)
+                    else Cycles.add(() => operation(Data))
+                })
+            }
+
+            case _ =>
+
         }
-
-        case AddressingMode.AbsoluteIndexed => {
-            Cycles.add(fetchNextByte)
-            Cycles.add(fetchNextByte)
-            Cycles.add(() => {
-                val AddressLowByte = Cycles.getNextStoredByte()
-                val AddressHighByte = Cycles.getNextStoredByte() << 8
-                val Address = (AddressHighByte | AddressLowByte) + index
-
-                // Extra cycle needed if page boundary crossed
-                if (AddressLowByte + index < 0x100) operation(memory(Address))
-                else Cycles.add(() => operation(memory(Address)))
-            })
-        }
-
-        case AddressingMode.Indirect => {
-            Cycles.add(fetchNextByte)
-            Cycles.add(fetchNextByte)
-            Cycles.add(() => {
-                val PointerLowByte = Cycles.getNextStoredByte()
-                var pointerHighByte = Cycles.getNextStoredByte()
-
-                // Replicate page boundary bug:
-                if ((pointerHighByte & 0xFF) == 0xFF) pointerHighByte = 0
-                else pointerHighByte <<= 8
-
-                val Pointer = pointerHighByte | PointerLowByte
-                Cycles.storeByte(memory(Pointer))
-            })
-            Cycles.add(() => programCounter = Cycles.getNextStoredByte())
-        }
-
-        case AddressingMode.IndexedIndirect => {
-            Cycles.add(fetchNextByte)
-            Cycles.add(() => {
-                Cycles.storeByte((Cycles.getNextStoredByte() + xIndex) & 0xFF)
-            })
-            Cycles.add(() => {
-                val Pointer = Cycles.peekNextStoredByte()
-                Cycles.storeByte(memory(Pointer))
-            })
-            Cycles.add(() => {
-                val Pointer = Cycles.getNextStoredByte()
-                Cycles.storeByte(memory(Pointer + 1))
-            })
-            Cycles.add(() => operation(memory(getStoredAddress())))
-        }
-
-        case AddressingMode.IndirectIndexed => {
-            Cycles.add(fetchNextByte)
-            Cycles.add(() => {
-                val Pointer = Cycles.peekNextStoredByte()
-                Cycles.storeByte(memory(Pointer))
-            })
-            Cycles.add(() => {
-                val Pointer = Cycles.getNextStoredByte()
-                Cycles.storeByte(memory(Pointer + 1))
-            })
-            Cycles.add(() => {
-                val AddressLowByte = Cycles.getNextStoredByte()
-                val AddressHighByte = Cycles.getNextStoredByte() << 8
-                val Address = (AddressHighByte | AddressLowByte) + yIndex
-
-                // Extra cycle needed if page boundary crossed
-                if (AddressLowByte + yIndex < 0x100) operation(memory(Address))
-                else Cycles.add(() => operation(memory(Address)))
-            })
-        }
-
-        case _ =>
-
     }
 
     /* ------- Opcodes ------- */
 
-    private def adc(data: Int): Unit = {
+    private def adc(data: Option[Int]): Unit = {
         val PreviousSignBit = accumulator & NegativeFlagMask
 
-        accumulator += data
+        accumulator += data.get
         accumulator += status & CarryFlagMask
 
         // Update Carry flag
@@ -349,54 +374,53 @@ class CPU(memory: Memory) {
         updateNegativeFlag(accumulator)
     }
 
-    private def and(data: Int): Unit = {
-        accumulator &= data
+    private def and(data: Option[Int]): Unit = {
+        accumulator &= data.get
         updateZeroFlag(accumulator)
         updateNegativeFlag(accumulator)
     }
 
-    // Overloaded no argument version (Accumulator)
-    private def asl(): Unit = {
-        // Set Carry flag to previous bit 7
-        status |= ((accumulator & NegativeFlagMask) >> 7)
+    private def asl(option: Option[Int]): Unit = option match {
+        case Some(data) => {
+            // Set Carry flag to previous bit 7
+            status |= ((memory(data) & NegativeFlagMask) >> 7)
+            memory(data) <<= 1
+            updateZeroFlag(memory(data))
+            updateNegativeFlag(memory(data))
+        }
+        case None => {
+            status |= ((accumulator & NegativeFlagMask) >> 7)
+            accumulator <<= 1
+            updateZeroFlag(accumulator)
+            updateNegativeFlag(accumulator)
+        }
+    }
 
-        accumulator <<= 1
+    // private def bcc(data: Option[Int]): Unit = {
+    //     if ((status & CarryFlagMask) == 1) programCounter += data.get - 2
+    // }
 
+    private def jmp(data: Option[Int]): Unit = programCounter = data.get
+
+    private def lda(data: Option[Int]): Unit = {
+        accumulator = data.get
         updateZeroFlag(accumulator)
         updateNegativeFlag(accumulator)
     }
 
-    private def asl(data: Int): Unit = {
-        // Set Carry flag to previous bit 7
-        status |= ((memory(data) & NegativeFlagMask) >> 7)
-
-        memory(data) <<= 1
-
-        updateZeroFlag(memory(data))
-        updateNegativeFlag(memory(data))
-    }
-
-    private def jmp(data: Int): Unit = programCounter = data
-
-    private def lda(data: Int): Unit = {
-        accumulator = data
-        updateZeroFlag(accumulator)
-        updateNegativeFlag(accumulator)
-    }
-
-    private def ldx(data: Int): Unit = {
-        xIndex = data
+    private def ldx(data: Option[Int]): Unit = {
+        xIndex = data.get
         updateZeroFlag(xIndex)
         updateNegativeFlag(xIndex)
     }
 
-    private def ldy(data: Int): Unit = {
-        yIndex = data
+    private def ldy(data: Option[Int]): Unit = {
+        yIndex = data.get
         updateZeroFlag(yIndex)
         updateNegativeFlag(yIndex)
     }
 
-    private def nop(data: Int): Unit = {}
+    private def nop(data: Option[Int]): Unit = {}
 
 
 }
