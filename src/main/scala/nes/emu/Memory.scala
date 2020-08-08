@@ -11,9 +11,11 @@ class Memory {
 
     /* --- TESTING 123 123 --- */
 
-    self(0x0000) = 0xA9
-    self(0x0001) = 0x02 // LDA #$02
-    self(0x0002) = 0x0A // ASL A
+    self(0x0001) = 0xA9
+    self(0x0002) = 0x01 // LDA #$01
+    self(0x0003) = 0x24
+    self(0x0004) = 0x99 // BIT $99
+    self(0x0099) = 0x01
 
     def apply(pointer: Int): Int = self(pointer)
     def update(pointer: Int, replacement: Int) = self(pointer) = replacement
