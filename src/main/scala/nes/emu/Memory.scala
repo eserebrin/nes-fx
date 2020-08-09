@@ -2,20 +2,18 @@ package nes.emu
 
 class Memory {
 
-    private var ram = Array.fill[Int](0x800)(0xEA)
+    private var ram = Array.fill(0x800)(0xEA)
     // TODO: the rest of the memory
-    private var cartridge = Array.fill[Int](0xBFE0)(0)
+    private var cartridge = Array.fill(0xBFE0)(0)
 
-    private var self = ram ++ cartridge
+    private var self = ram ++ cartridge ++ Array.fill(0x10000 - 0xBFE0 - 0x800)(0xEA)
 
 
     /* --- TESTING 123 123 --- */
 
-    self(0x0001) = 0xA9
-    self(0x0002) = 0x01 // LDA #$01
-    self(0x0003) = 0x24
-    self(0x0004) = 0x99 // BIT $99
-    self(0x0099) = 0x01
+    self(0x0000) = 0x00 // BRK
+    self(0xFFFE) = 0x34
+    self(0xFFFF) = 0x12 // Interrupt vector
 
     def apply(pointer: Int): Int = self(pointer)
     def update(pointer: Int, replacement: Int) = self(pointer) = replacement

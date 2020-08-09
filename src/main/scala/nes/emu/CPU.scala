@@ -18,6 +18,7 @@ class CPU(memory: Memory) {
     private val ZeroFlagMask = 1 << 1
     private val InterruptDisableFlagMask = 1 << 2
     private val DecimalFlagMask = 1 << 3
+    private val BFlagMask = 1 << 4
     private val OverflowFlagMask = 1 << 6
     private val NegativeFlagMask = 1 << 7
 
@@ -92,10 +93,11 @@ class CPU(memory: Memory) {
             |Index X:         ${xIndex}%02X
             |Index Y:         ${yIndex}%02X
             |Stack Pointer:   ${stackPointer}%02X
-            |  === Status ===
+            |  === Status Flags ===
             |Negative: ${(status & NegativeFlagMask) >> 7}%1d
             |Overflow: ${(status & OverflowFlagMask) >> 6}%1d
             |Decimal: ${(status & DecimalFlagMask) >> 3}%1d
+            |Break Command (B): ${(status & BFlagMask) >> 4}%1d
             |Interrupt Disable: ${(status & InterruptDisableFlagMask) >> 2}%1d
             |Zero: ${(status & ZeroFlagMask) >> 1}%1d
             |Carry: ${status & CarryFlagMask}%1d
@@ -148,6 +150,44 @@ class CPU(memory: Memory) {
 
         // BRK (Force interrupt)
         case 0x00 => createImpliedOperation(brk)
+
+        // Status flag clearing instructions
+        case 0x18 => createImpliedOperation(clc)
+        case 0xD8 => createImpliedOperation(cld)
+        case 0x58 => createImpliedOperation(cli)
+        case 0xB8 => createImpliedOperation(clv)
+
+        // CMP (Compare accumulator)
+        case 0xC9 => createOperation(AddressingMode.Immediate, OperationType.Read, cmp)
+        case 0xC5 => createOperation(AddressingMode.ZeroPage, OperationType.Read, cmp)
+        case 0xD5 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.Read, cmp, xIndex)
+        case 0xCD => createOperation(AddressingMode.Absolute, OperationType.Read, cmp)
+        case 0xDD => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, cmp, xIndex)
+        case 0xD9 => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, cmp, yIndex)
+        case 0xC1 => createOperation(AddressingMode.IndexedIndirect, OperationType.Read, cmp)
+        case 0xD1 => createOperation(AddressingMode.IndirectIndexed, OperationType.Read, cmp)
+
+        // CPX (Compare X Register)
+        case 0xE0 => createOperation(AddressingMode.Immediate, OperationType.Read, cpx)
+        case 0xE4 => createOperation(AddressingMode.ZeroPage, OperationType.Read, cpx)
+        case 0xEC => createOperation(AddressingMode.Absolute, OperationType.Read, cpx)
+
+        // CPY (Compare Y Register)
+        case 0xC0 => createOperation(AddressingMode.Immediate, OperationType.Read, cpy)
+        case 0xC4 => createOperation(AddressingMode.ZeroPage, OperationType.Read, cpy)
+        case 0xCC => createOperation(AddressingMode.Absolute, OperationType.Read, cpy)
+
+        // DEC (Decrement Memory)
+        case 0xC6 => createOperation(AddressingMode.ZeroPage, OperationType.ReadModifyWrite, dec)
+        case 0xD6 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.ReadModifyWrite, dec, xIndex)
+        case 0xCE => createOperation(AddressingMode.Absolute, OperationType.ReadModifyWrite, dec)
+        case 0xDE => createOperation(AddressingMode.AbsoluteIndexed, OperationType.ReadModifyWrite, dec, xIndex)
+
+        // DEX (Decrement X register)
+        case 0xCA => createImpliedOperation(dex)
+
+        // DEY (Decrement Y register)
+        case 0x88 => createImpliedOperation(dey)
 
         // JMP (Jump)
         case 0x4C => createOperation(AddressingMode.Absolute, OperationType.Other, jmp)
@@ -214,9 +254,9 @@ class CPU(memory: Memory) {
 
     // TODO: look into beter flag masking options
 
-    private def updateZeroFlag(register: Int): Unit = {
-        if (register == 0) status |= ZeroFlagMask
-        else status &= 0xFD // 11111101
+    private def updateZeroFlag(condition: Boolean): Unit = {
+        if (condition) status |= ZeroFlagMask
+        else status &= ~ZeroFlagMask & 0xFF
     }
 
     private def updateNegativeFlag(register: Int): Unit = {
@@ -224,11 +264,10 @@ class CPU(memory: Memory) {
         status |= NewNegativeFlag
     }
 
-    // private def updateCarryFlag(register: Int): Unit = {
-    //     val NewCarryFlag = (register & 0x100) >> 8
-    //     register &= 0xFF
-    //     status |= NewCarryFlag
-    // }
+    private def updateCarryFlag(condition: Boolean): Unit = {
+        if (condition) status |= CarryFlagMask
+        else status &= ~CarryFlagMask & 0xFF
+    }
 
 
     private def createOperation(
@@ -376,7 +415,9 @@ class CPU(memory: Memory) {
             Cycles.add(() => {
                 val PreviousPCPage = programCounter & 0xFF00
 
-                programCounter += Cycles.getNextStoredByte()
+                // Calculate signed offset (Byte -> Int)
+                val Offset = (~0 << 8) | Cycles.getNextStoredByte()
+                programCounter += Offset
 
                 // Add one cycle after branch, two if to a different page
                 Cycles.add()
@@ -385,6 +426,7 @@ class CPU(memory: Memory) {
         }
         else programCounter += 1
     }
+
 
     /* ------- Opcodes ------- */
 
@@ -401,15 +443,15 @@ class CPU(memory: Memory) {
 
         // Update Overflow flag
         if ((accumulator & NegativeFlagMask) != PreviousSignBit) status |= OverflowFlagMask
-        else status &= 0xBF // 10111111
+        else status &= ~OverflowFlagMask & 0xFF
 
-        updateZeroFlag(accumulator)
+        updateZeroFlag(accumulator == 0)
         updateNegativeFlag(accumulator)
     }
 
     private def and(data: Option[Int]): Unit = {
         accumulator &= data.get
-        updateZeroFlag(accumulator)
+        updateZeroFlag(accumulator == 0)
         updateNegativeFlag(accumulator)
     }
 
@@ -418,13 +460,13 @@ class CPU(memory: Memory) {
             // Set Carry flag to previous bit 7
             status |= ((memory(data) & NegativeFlagMask) >> 7)
             memory(data) <<= 1
-            updateZeroFlag(memory(data))
+            updateZeroFlag(memory(data) == 0)
             updateNegativeFlag(memory(data))
         }
         case None => {
             status |= ((accumulator & NegativeFlagMask) >> 7)
             accumulator <<= 1
-            updateZeroFlag(accumulator)
+            updateZeroFlag(accumulator == 0)
             updateNegativeFlag(accumulator)
         }
     }
@@ -451,9 +493,12 @@ class CPU(memory: Memory) {
 
     private def brk(): Unit = {
         Cycles.add(() => programCounter += 1)
-        Cycles.add(() => pushToStack(programCounter & 0xFF00))
-        Cycles.add(() => pushToStack(programCounter & 0x00FF))
-        Cycles.add(() => pushToStack(status))
+        Cycles.add(() => pushToStack((programCounter & 0xFF00) >> 8))
+        Cycles.add(() => pushToStack(programCounter & 0xFF))
+        Cycles.add(() => {
+            status |= BFlagMask
+            pushToStack(status)
+        })
         Cycles.add(() => Cycles.storeByte(memory(0xFFFE)))
         Cycles.add(() => {
             val ProgramCounterLowByte = Cycles.getNextStoredByte()
@@ -466,27 +511,75 @@ class CPU(memory: Memory) {
 
     private def bvs(): Boolean = !bvc()
 
+    private def clc(): Unit = Cycles.add(() => status &= ~CarryFlagMask & 0xFF)
+
+    private def cld(): Unit = Cycles.add(() => status &= ~DecimalFlagMask & 0xFF) 
+
+    private def cli(): Unit = Cycles.add(() => status &= ~InterruptDisableFlagMask & 0xFF) 
+
+    private def clv(): Unit = Cycles.add(() => status &= ~OverflowFlagMask & 0xFF) 
+
+    private def cmp(option: Option[Int]): Unit = {
+        val data = option.get
+        updateCarryFlag(accumulator >= data)
+        updateZeroFlag(accumulator == data)
+        updateNegativeFlag(accumulator)
+    }
+
+    private def cpx(option: Option[Int]): Unit = {
+        val data = option.get
+        updateCarryFlag(xIndex >= data)
+        updateZeroFlag(xIndex == data)
+        updateNegativeFlag(xIndex)
+    }
+
+    private def cpy(option: Option[Int]): Unit = {
+        val data = option.get
+        updateCarryFlag(yIndex >= data)
+        updateZeroFlag(yIndex == data)
+        updateNegativeFlag(yIndex)
+    }
+
+    private def dec(option: Option[Int]): Unit = {
+        val data = option.get
+        memory(data) -= 1
+        updateZeroFlag(memory(data) == 0)
+        updateNegativeFlag(memory(data))
+    }
+
+    private def dex(): Unit = Cycles.add(() => {
+        xIndex -= 1
+        updateZeroFlag(xIndex == 0)
+        updateNegativeFlag(xIndex)
+    })
+
+    private def dey(): Unit = Cycles.add(() => {
+        yIndex -= 1
+        updateZeroFlag(yIndex == 0)
+        updateNegativeFlag(yIndex)
+    })
+
     private def jmp(data: Option[Int]): Unit = programCounter = data.get
 
     private def lda(data: Option[Int]): Unit = {
         accumulator = data.get
-        updateZeroFlag(accumulator)
+        updateZeroFlag(accumulator == 0)
         updateNegativeFlag(accumulator)
     }
 
     private def ldx(data: Option[Int]): Unit = {
         xIndex = data.get
-        updateZeroFlag(xIndex)
+        updateZeroFlag(xIndex == 0)
         updateNegativeFlag(xIndex)
     }
 
     private def ldy(data: Option[Int]): Unit = {
         yIndex = data.get
-        updateZeroFlag(yIndex)
+        updateZeroFlag(yIndex == 0)
         updateNegativeFlag(yIndex)
     }
 
-    private def nop(data: Option[Int]): Unit = Cycles.add()
+    private def nop(): Unit = Cycles.add()
 
 
 }
