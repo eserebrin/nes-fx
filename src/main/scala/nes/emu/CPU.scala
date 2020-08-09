@@ -1,7 +1,6 @@
 package nes.emu
 
 import scala.collection.mutable
-import scalafx.collections.ObservableBuffer.Add
 
 class CPU(memory: Memory) {
 
@@ -242,8 +241,93 @@ class CPU(memory: Memory) {
         case 0xAC => createOperation(AddressingMode.Absolute, OperationType.Read, ldy)
         case 0xBC => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, ldy, xIndex)
 
+        // LSR (Logical Shift Right)
+        case 0x4A => createOperation(AddressingMode.Accumulator, OperationType.ReadModifyWrite, lsr)
+        case 0x46 => createOperation(AddressingMode.ZeroPage, OperationType.ReadModifyWrite, lsr)
+        case 0x56 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.ReadModifyWrite, lsr, xIndex)
+        case 0x4E => createOperation(AddressingMode.Absolute, OperationType.ReadModifyWrite, lsr)
+        case 0x5E => createOperation(AddressingMode.AbsoluteIndexed, OperationType.ReadModifyWrite, lsr, xIndex)
+
+        // ORA (Logical Inclusive OR)
+        case 0x09 => createOperation(AddressingMode.Immediate, OperationType.Read, ora)
+        case 0x05 => createOperation(AddressingMode.ZeroPage, OperationType.Read, ora)
+        case 0x15 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.Read, ora, xIndex)
+        case 0x0D => createOperation(AddressingMode.Absolute, OperationType.Read, ora)
+        case 0x1D => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, ora, xIndex)
+        case 0x19 => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, ora, yIndex)
+        case 0x01 => createOperation(AddressingMode.IndexedIndirect, OperationType.Read, ora)
+        case 0x11 => createOperation(AddressingMode.IndirectIndexed, OperationType.Read, ora)
+
         // NOP (No operation)
         case 0xEA => createImpliedOperation(nop)
+
+        // Stack accessing instructions
+        case 0x48 => createImpliedOperation(pha)
+        case 0x08 => createImpliedOperation(php)
+        case 0x68 => createImpliedOperation(pla)
+        case 0x28 => createImpliedOperation(plp)
+
+        // ROL (Rotate left)
+        case 0x2A => createOperation(AddressingMode.Accumulator, OperationType.ReadModifyWrite, rol)
+        case 0x26 => createOperation(AddressingMode.ZeroPage, OperationType.ReadModifyWrite, rol)
+        case 0x36 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.ReadModifyWrite, rol, xIndex)
+        case 0x2E => createOperation(AddressingMode.Absolute, OperationType.ReadModifyWrite, rol)
+        case 0x3E => createOperation(AddressingMode.AbsoluteIndexed, OperationType.ReadModifyWrite, rol, xIndex)
+
+        // ROR (Rotate right)
+        case 0x6A => createOperation(AddressingMode.Accumulator, OperationType.ReadModifyWrite, ror)
+        case 0x66 => createOperation(AddressingMode.ZeroPage, OperationType.ReadModifyWrite, ror)
+        case 0x76 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.ReadModifyWrite, ror, xIndex)
+        case 0x6E => createOperation(AddressingMode.Absolute, OperationType.ReadModifyWrite, ror)
+        case 0x7E => createOperation(AddressingMode.AbsoluteIndexed, OperationType.ReadModifyWrite, ror, xIndex)
+
+        // RTI (Return from Interrupt)
+        case 0x40 => createImpliedOperation(rti)
+
+        // RTS (Return from subroutine)
+        case 0x60 => createImpliedOperation(rts)
+
+        // SBC (Subtract with carry)
+        case 0xE9 => createOperation(AddressingMode.Immediate, OperationType.Read, sbc)
+        case 0xE5 => createOperation(AddressingMode.ZeroPage, OperationType.Read, sbc)
+        case 0xF5 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.Read, sbc, xIndex)
+        case 0xED => createOperation(AddressingMode.Absolute, OperationType.Read, sbc)
+        case 0xFD => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, sbc, xIndex)
+        case 0xF9 => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, sbc, yIndex)
+        case 0xE1 => createOperation(AddressingMode.IndexedIndirect, OperationType.Read, sbc)
+        case 0xF1 => createOperation(AddressingMode.IndirectIndexed, OperationType.Read, sbc)
+
+        // Flag setting instructions
+        case 0x38 => createImpliedOperation(sec)
+        case 0xF8 => createImpliedOperation(sed)
+        case 0x78 => createImpliedOperation(sei)
+
+        // STA (Store accumulator)
+        case 0x85 => createOperation(AddressingMode.ZeroPage, OperationType.Write, sta)
+        case 0x95 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.Write, sta, xIndex)
+        case 0x8D => createOperation(AddressingMode.Absolute, OperationType.Write, sta)
+        case 0x9D => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Write, sta, xIndex)
+        case 0x99 => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Write, sta, yIndex)
+        case 0x81 => createOperation(AddressingMode.IndexedIndirect, OperationType.Write, sta)
+        case 0x91 => createOperation(AddressingMode.IndirectIndexed, OperationType.Write, sta)
+
+        // STX (Store X register)
+        case 0x86 => createOperation(AddressingMode.ZeroPage, OperationType.Write, stx)
+        case 0x96 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.Write, stx, yIndex)
+        case 0x8E => createOperation(AddressingMode.Absolute, OperationType.Write, stx)
+
+        // STY (Store Y register)
+        case 0x84 => createOperation(AddressingMode.ZeroPage, OperationType.Write, sty)
+        case 0x94 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.Write, sty, xIndex)
+        case 0x8C => createOperation(AddressingMode.Absolute, OperationType.Write, sty)
+
+        // Transfer instructions
+        case 0xAA => createImpliedOperation(tax)
+        case 0xA8 => createImpliedOperation(tay)
+        case 0xBA => createImpliedOperation(tsx)
+        case 0x8A => createImpliedOperation(txa)
+        case 0x9A => createImpliedOperation(txs)
+        case 0x98 => createImpliedOperation(tya)
 
         case _ =>
 
@@ -268,7 +352,7 @@ class CPU(memory: Memory) {
         memory(stackPointer) = data
     }
 
-    private def popFromStack(): Int = {
+    private def pullFromStack(): Int = {
         val data = memory(stackPointer)
         stackPointer += 1
         data
@@ -278,8 +362,6 @@ class CPU(memory: Memory) {
 
 
     /* ------ Flag updating methods ------ */
-
-    // TODO: look into beter flag masking options
 
     private def updateZeroFlag(condition: Boolean): Unit = {
         if (condition) status |= ZeroFlagMask
@@ -296,6 +378,10 @@ class CPU(memory: Memory) {
         else status &= ~CarryFlagMask & 0xFF
     }
 
+    private def updateOverflowFlag(condition: Boolean): Unit = {
+        if (condition) status |= OverflowFlagMask
+        else status &= ~OverflowFlagMask & 0xFF
+    }
 
     // start the operation by passing in the correct address to the opcode
     private def createOperation(
@@ -451,10 +537,7 @@ class CPU(memory: Memory) {
         accumulator &= 0xFF
         status |= NewCarryFlag
 
-        // Update Overflow flag
-        if ((accumulator & NegativeFlagMask) != PreviousSignBit) status |= OverflowFlagMask
-        else status &= ~OverflowFlagMask & 0xFF
-
+        updateOverflowFlag((accumulator & NegativeFlagMask) != PreviousSignBit)
         updateZeroFlag(accumulator == 0)
         updateNegativeFlag(accumulator)
     }
@@ -626,10 +709,144 @@ class CPU(memory: Memory) {
         updateNegativeFlag(yIndex)
     }
 
-    // private def lsr(address: Option[Int]): Unit = {
-    //     ???
-    // }
+    private def lsr(option: Option[Int]): Unit = option match {
+        case Some(address) => {
+            status |= memory(address) & CarryFlagMask
+            memory(address) >>= 1
+            updateZeroFlag(memory(address) == 0)
+            updateNegativeFlag(memory(address))
+        }
+        case None => {
+            status |= accumulator & CarryFlagMask
+            accumulator >>= 1
+            updateZeroFlag(accumulator == 0)
+            updateNegativeFlag(accumulator)
+        }
+    }
 
     private def nop(): Unit = Cycles.add()
+
+    private def ora(address: Option[Int]): Unit = {
+        accumulator |= address.get
+        updateZeroFlag(accumulator == 0)
+        updateNegativeFlag(accumulator)
+    }
+
+    private def pha(): Unit = {
+        Cycles.add()
+        Cycles.add(() => pushToStack(accumulator))
+    }
+
+    private def php(): Unit = {
+        Cycles.add()
+        Cycles.add(() => pushToStack(status))
+    }
+
+    private def pla(): Unit = {
+        addCycles(2)
+        Cycles.add(() => accumulator = pullFromStack())
+    }
+
+    private def plp(): Unit = {
+        addCycles(2)
+        Cycles.add(() => status = pullFromStack())
+    }
+
+    private def rol(option: Option[Int]): Unit = option match {
+        case Some(address) => {
+            // New carry flag is the old bit 7
+            val NewCarryFlag = (memory(address) & (1 << 7)) >> 7
+
+            memory(address) <<= 1
+            memory(address) |= status & CarryFlagMask
+
+            status |= NewCarryFlag
+            updateZeroFlag(memory(address) == 0)
+            updateNegativeFlag(memory(address))
+        }
+        case None => {
+            // New carry flag is the old bit 7
+            val NewCarryFlag = (accumulator & (1 << 7)) >> 7
+
+            accumulator <<= 1
+            accumulator |= status & CarryFlagMask
+
+            status |= NewCarryFlag
+            updateZeroFlag(accumulator == 0)
+            updateNegativeFlag(accumulator)
+        }
+    }
+
+    private def ror(option: Option[Int]): Unit = option match {
+        case Some(address) => {
+            val NewCarryFlag = memory(address) & 1
+
+            memory(address) >>= 1
+            memory(address) |= (status & CarryFlagMask) << 7
+
+            status |= NewCarryFlag
+            updateZeroFlag(memory(address) == 0)
+            updateNegativeFlag(memory(address))
+        }
+        case None => {
+            val NewCarryFlag = accumulator & 1
+
+            accumulator >>= 1
+            accumulator |= (status & CarryFlagMask) << 7
+
+            status |= NewCarryFlag
+            updateZeroFlag(accumulator == 0)
+            updateNegativeFlag(accumulator)
+        }
+    }
+
+    private def rti(): Unit = {
+        addCycles(2)
+        Cycles.add(() => status = pullFromStack())
+        Cycles.add(() => Cycles.storeByte(pullFromStack()))
+        Cycles.add(() => {
+            val ProgramCounterLowByte = Cycles.getNextStoredByte()
+            val ProgramCounterHighByte = pullFromStack() << 8
+            programCounter = ProgramCounterHighByte | ProgramCounterLowByte
+        })
+    }
+
+    private def rts(): Unit = {
+        addCycles(2)
+        Cycles.add(() => Cycles.storeByte(pullFromStack()))
+        Cycles.add(() => {
+            val ProgramCounterLowByte = Cycles.getNextStoredByte()
+            val ProgramCounterHighByte = pullFromStack() << 8
+            programCounter = ProgramCounterHighByte | ProgramCounterLowByte
+        })
+        Cycles.add(() => programCounter += 1)
+    }
+
+    private def sbc(address: Option[Int]): Unit = {
+        val PreviousSignBit = accumulator & NegativeFlagMask
+
+        accumulator -= memory(address.get)
+        accumulator -= ~(status & CarryFlagMask) & 1
+
+        updateCarryFlag(accumulator >= 0)
+        updateOverflowFlag((accumulator & NegativeFlagMask) != PreviousSignBit)
+        updateZeroFlag(accumulator == 0)
+        updateNegativeFlag(accumulator)
+    }
+
+    private def sec(): Unit = status |= CarryFlagMask
+    private def sed(): Unit = status |= DecimalFlagMask
+    private def sei(): Unit = status |= InterruptDisableFlagMask
+
+    private def sta(address: Option[Int]): Unit = memory(address.get) = accumulator
+    private def stx(address: Option[Int]): Unit = memory(address.get) = xIndex
+    private def sty(address: Option[Int]): Unit = memory(address.get) = yIndex
+
+    private def tax(): Unit = xIndex = accumulator
+    private def tay(): Unit = yIndex = accumulator
+    private def tsx(): Unit = xIndex = stackPointer
+    private def txa(): Unit = accumulator = xIndex
+    private def txs(): Unit = stackPointer = xIndex
+    private def tya(): Unit = accumulator = yIndex
 
 }
