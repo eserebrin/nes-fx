@@ -21,10 +21,6 @@ object Console extends JFXApp {
     // Emulator Info File logging setup
     // private var fileLog = ""
 
-    // Create Emulator Components
-    val memory = new Memory
-    val cpu = new CPU(memory)
-
     // Create window and run main loop
     stage = new JFXApp.PrimaryStage {
         title = "NES Emulator"
@@ -32,9 +28,16 @@ object Console extends JFXApp {
             val canvas = new Canvas(DisplayWidth, DisplayHeight)
             content = canvas
             val g = canvas.graphicsContext2D
-            val args = parameters.raw.toArray
+            val args = parameters.raw
 
-            val IsDebugModeEnabled = args(0) == "debug"
+            val RomFileName = args(0)
+            val IsDebugModeEnabled = args(1) == "debug"
+
+
+            // Create Emulator Components
+            val memory = new Memory(RomFileName)
+            val cpu = new CPU(memory)
+
 
             // TODO: Controller handling
             canvas.onKeyPressed = (e: KeyEvent) => e.code match {

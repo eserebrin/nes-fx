@@ -8,7 +8,7 @@ class CPU(memory: Memory) {
     private var accumulator = 0
     private var xIndex = 0
     private var yIndex = 0
-    private var programCounter = 0
+    private var programCounter = 0xC000
     private var stackPointer = 0xFD
     private var status = 0x34
 
