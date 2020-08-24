@@ -35,8 +35,9 @@ object Console extends JFXApp {
 
 
             // Create Emulator Components
-            val memory = new Memory(RomFileName)
-            val cpu = new CPU(memory)
+            val cartridge = new Cartridge(RomFileName)
+            val mapper = Mapper(cartridge)
+            val cpu = new CPU(mapper.getCPUAddressSpace())
 
 
             // TODO: Controller handling
@@ -66,6 +67,7 @@ object Console extends JFXApp {
                         if (i % 12 == 0) {
                             // TODO: rework file logger for efficiency and memory usage
                             // println(cpu.createTextLogOutput())
+                            println(cpu.createTextLogOutput())
                             cpu.executeCycle()
                         }
                     }

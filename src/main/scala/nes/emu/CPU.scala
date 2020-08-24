@@ -2,7 +2,7 @@ package nes.emu
 
 import scala.collection.mutable
 
-class CPU(memory: Memory) {
+class CPU(memory: Array[Int]) {
 
     // CPU registers
     private var accumulator = 0
@@ -101,6 +101,7 @@ class CPU(memory: Memory) {
             |Zero: ${(status & ZeroFlagMask) >> 1}%1d
             |Carry: ${status & CarryFlagMask}%1d
             |----------------------
+            |Memory 2-3: ${memory(0x200)}%02X ${memory(0x300)}%02X
          """.stripMargin('|')
     }
 
@@ -677,7 +678,7 @@ class CPU(memory: Memory) {
         updateNegativeFlag(yIndex)
     }
 
-    private def jmp(address: Option[Int]): Unit = programCounter = memory(address.get)
+    private def jmp(address: Option[Int]): Unit = programCounter = address.get
 
     private def jsr(): Unit = {
         Cycles.add(fetchNextByte)

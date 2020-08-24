@@ -5,23 +5,15 @@ import java.io.BufferedInputStream
 import java.io.FileInputStream
 import java.io.File
 
-class Memory(cartridgeFileName: String) {
+class Cartridge(cartridgeFileName: String) {
 
-    private val MapperNumber = (Header(6) & 0xF0) >> 4
-
-    private val Cartridge = createCartridge(getROMFileContents())
-    private val RAM = Array.fill(0x800)(0)
-    private val PPURegisters = Array.fill(8)(0)
-    private val PPURegisterMirrrors = PPURegisters * 8
-    private val APURegisters = Array.fill(0x18)(0)
-    private val APUArea = Array.fill(8)(0)
-    private var MemoryComponents = Vector(RAM, RAM, RAM, PPURegisters, PPURegisterMirrrors, APURegisters, APUArea, Cartridge)
-    private var self = createAddressableSpace(MapperNumber, MemoryComponents)
-
-
-    def apply(pointer: Int): Int = self(pointer)
-    def update(pointer: Int, replacement: Int): Unit = self(pointer) = replacement
-
+    private val Components = getCartridgeComponents(getROMFileContents())
+    val Header = Components(0)
+    val MapperNumber = (Header(6) & 0xF0) >> 4
+    def Trainer = Components(1)
+    def PRGROM = Components(2)
+    def CHRROM = Components(3)
+    def MiscROM = Components(4)
 
     private def getROMFileContents(): mutable.Buffer[Int] = {
         var romContents = mutable.Buffer[Int]()
@@ -31,8 +23,7 @@ class Memory(cartridgeFileName: String) {
         romContents
     }
 
-    // TODO: Mappers
-    private def createCartridge(romContents: mutable.Buffer[Int]): Array[Int] = {
+    private def getCartridgeComponents(romContents: mutable.Buffer[Int]): Vector[Vector[Int]] = {
         val Header = romContents.take(16).toVector
         romContents --= Header
 
@@ -50,7 +41,7 @@ class Memory(cartridgeFileName: String) {
         val CHRROM = romContents.take(CHRROMSize).toVector
         romContents --= CHRROM
 
-        Trainer ++ PRGROM ++ CHRROM ++ romContents
+        Vector(Header, Trainer, PRGROM, CHRROM, romContents.toVector)
     }
 
     private def ensureCorrectFileFormat(header: Vector[Int]): Unit = {
@@ -72,7 +63,7 @@ class Memory(cartridgeFileName: String) {
             val Multiplier = (lowByte & 3) * 2 + 1
             Exponent.toInt * Multiplier
         }
-        else (highNibble << 8) | lowByte
+        else ((highNibble << 8) | lowByte) * 1024 * 16
     }
 
 }
