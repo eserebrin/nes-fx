@@ -513,8 +513,12 @@ class CPU(memory: Array[Int]) {
                 val PreviousPCPage = programCounter & 0xFF00
 
                 // Calculate signed offset (Byte -> Int)
-                val Offset = (~0 << 8) | Cycles.getNextStoredByte()
-                programCounter += Offset
+                val OffsetByte = Cycles.getNextStoredByte()
+                var adjustedOffset = OffsetByte
+                if ((OffsetByte & NegativeFlagMask) >> 7 == 1) {
+                    adjustedOffset = (~0 << 8) | OffsetByte
+                }
+                programCounter += adjustedOffset
 
                 // Add one cycle after branch, two if to a different page
                 Cycles.add()
