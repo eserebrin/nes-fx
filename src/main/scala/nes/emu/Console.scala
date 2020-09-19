@@ -18,8 +18,8 @@ object Console extends JFXApp {
 
     private val MasterClockSpeed = 21477272 // Hz
 
-    // Emulator Info File logging setup
-    // private var fileLog = ""
+    private var fileLog = ""
+    def addLog(log: String): Unit = fileLog += "   MSG:" + log
 
     // Create window and run main loop
     stage = new JFXApp.PrimaryStage {
@@ -48,9 +48,9 @@ object Console extends JFXApp {
 
                 // P -> Power off
                 case KeyCode.P => {
-                    // val FileLogPrintWriter = new PrintWriter(new File("log.txt"))
-                    // FileLogPrintWriter.write(fileLog)
-                    // FileLogPrintWriter.close()
+                    val FileLogPrintWriter = new PrintWriter(new File("log.txt"))
+                    FileLogPrintWriter.write(fileLog)
+                    FileLogPrintWriter.close()
                     sys.exit()
                 }
 
@@ -63,12 +63,13 @@ object Console extends JFXApp {
                 // Regulate main loop to 60 fps
                 if (t - oldT > 1e9 / 60) {
                     // Emulate clock speed
-                    for (i <- 1 to MasterClockSpeed / 60) {
+                    for (i <- 0 until MasterClockSpeed / 60) {
                         if (i % 12 == 0) {
-                            // TODO: rework file logger for efficiency and memory usage
-                            // println(cpu.createTextLogOutput())
-                            println(cpu.createTextLogOutput())
+                            fileLog += cpu.createSingleLineTextLogOutput()
                             cpu.executeCycle()
+
+                            //NESTEST CYCLE LIMIT:
+                            if (cpu.cycleCount >= 26554) sys.exit()
                         }
                     }
                     oldT = t

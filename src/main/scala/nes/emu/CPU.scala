@@ -10,7 +10,7 @@ class CPU(memory: Array[Int]) {
     private var yIndex = 0
     private var programCounter = 0xC000
     private var stackPointer = 0xFD
-    private var status = 0x34
+    private var status = 0x24
 
     // Status Flags
     private val CarryFlagMask = 1
@@ -40,7 +40,8 @@ class CPU(memory: Array[Int]) {
     }
 
     // Total number of CPU cycles run since power on
-    private var cycleCount = 0L
+    // NOTE: this should be changed to private once CPU works
+    var cycleCount = 0L
 
     private object OperationType extends Enumeration {
         type T = Value
@@ -103,6 +104,12 @@ class CPU(memory: Array[Int]) {
             |----------------------
             |Memory 2-3: ${memory(0x200)}%02X ${memory(0x300)}%02X
          """.stripMargin('|')
+    }
+
+    def createSingleLineTextLogOutput(): String = {
+        if (Cycles.isOperationFinished())
+            f"$programCounter%04X   A:$accumulator%02X X:$xIndex%02X Y:$yIndex%02X P:$status%02X SP:$stackPointer%02X   CYC:${cycleCount + 7}\n"
+        else ""
     }
 
     private def startOperation(opcode: Int): Unit = opcode match {
@@ -508,24 +515,20 @@ class CPU(memory: Array[Int]) {
 
     private def createRelativeOperation(branchCondition: () => Boolean): Unit = {
         Cycles.add(fetchNextByte)
-        if (branchCondition()) {
-            Cycles.add(() => {
-                val PreviousPCPage = programCounter & 0xFF00
+        if (branchCondition()) Cycles.add(() => {
+            val PreviousPCPage = programCounter & 0xFF00
 
-                // Calculate signed offset (Byte -> Int)
-                val OffsetByte = Cycles.getNextStoredByte()
-                var adjustedOffset = OffsetByte
-                if ((OffsetByte & NegativeFlagMask) >> 7 == 1) {
-                    adjustedOffset = (~0 << 8) | OffsetByte
-                }
-                programCounter += adjustedOffset
+            // Calculate signed offset (Byte -> Int)
+            var offset = Cycles.getNextStoredByte()
+            if ((offset & NegativeFlagMask) >> 7 == 1) {
+                offset |= (~0 << 8)
+            }
+            programCounter += offset
 
-                // Add one cycle after branch, two if to a different page
-                Cycles.add()
-                if ((programCounter & 0xFF00) != PreviousPCPage) Cycles.add()
-            })
-        }
-        else programCounter += 1
+            // Add extra cycle if branching to a different page
+            if ((programCounter & 0xFF00) != PreviousPCPage) Cycles.add()
+        })
+        else Cycles.getNextStoredByte() // clear stored data
     }
 
 
@@ -670,17 +673,17 @@ class CPU(memory: Array[Int]) {
         updateNegativeFlag(memory(address))
     }
 
-    private def inx(): Unit = {
+    private def inx(): Unit = Cycles.add(() => {
         xIndex += 1
         updateZeroFlag(xIndex == 0)
         updateNegativeFlag(xIndex)
-    }
+    })
 
-    private def iny(): Unit = {
+    private def iny(): Unit = Cycles.add(() => {
         yIndex += 1
         updateZeroFlag(yIndex == 0)
         updateNegativeFlag(yIndex)
-    }
+    })
 
     private def jmp(address: Option[Int]): Unit = programCounter = address.get
 
@@ -839,19 +842,19 @@ class CPU(memory: Array[Int]) {
         updateNegativeFlag(accumulator)
     }
 
-    private def sec(): Unit = status |= CarryFlagMask
-    private def sed(): Unit = status |= DecimalFlagMask
-    private def sei(): Unit = status |= InterruptDisableFlagMask
+    private def sec(): Unit = Cycles.add(() => status |= CarryFlagMask)
+    private def sed(): Unit = Cycles.add(() => status |= DecimalFlagMask)
+    private def sei(): Unit = Cycles.add(() => status |= InterruptDisableFlagMask)
 
     private def sta(address: Option[Int]): Unit = memory(address.get) = accumulator
     private def stx(address: Option[Int]): Unit = memory(address.get) = xIndex
     private def sty(address: Option[Int]): Unit = memory(address.get) = yIndex
 
-    private def tax(): Unit = xIndex = accumulator
-    private def tay(): Unit = yIndex = accumulator
-    private def tsx(): Unit = xIndex = stackPointer
-    private def txa(): Unit = accumulator = xIndex
-    private def txs(): Unit = stackPointer = xIndex
-    private def tya(): Unit = accumulator = yIndex
+    private def tax(): Unit = Cycles.add(() => xIndex = accumulator)
+    private def tay(): Unit = Cycles.add(() => yIndex = accumulator)
+    private def tsx(): Unit = Cycles.add(() => xIndex = stackPointer)
+    private def txa(): Unit = Cycles.add(() => accumulator = xIndex)
+    private def txs(): Unit = Cycles.add(() => stackPointer = xIndex)
+    private def tya(): Unit = Cycles.add(() => accumulator = yIndex)
 
 }

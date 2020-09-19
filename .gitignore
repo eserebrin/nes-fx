@@ -41,4 +41,4 @@ project/plugins/project/
 .project/
 .DS_Store
 test-roms/
-log.txt
+*.txt
