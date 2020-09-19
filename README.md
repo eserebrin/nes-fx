@@ -6,7 +6,7 @@ I've made it public to help motivate me to work on it; not seeking other contrib
 
 ## Progress
 - [x] CPU
-- [ ] Memory / ROM Support
+- [x] Memory / ROM Support
 - [ ] Mappers
 - [ ] PPU
 - [ ] Controllers
