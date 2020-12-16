@@ -36,6 +36,9 @@ class CPU(memory: Array[Int]) {
         def storeByte(byte: Int): Unit = storedData += byte
         def getNextStoredByte(): Int = storedData.remove(0)
         def peekNextStoredByte(): Int = storedData(0)
+        def clearStoredData(): Unit = storedData = mutable.Buffer[Int]()
+
+        def showStoredData(): String = storedData.mkString(", ")
 
     }
 
@@ -78,6 +81,7 @@ class CPU(memory: Array[Int]) {
     private def fetchOpcode(): Unit = {
         val Opcode = memory(programCounter)
         programCounter += 1
+        // Console.addLog(s"Stored data: ${Cycles.showStoredData()}")
         startOperation(Opcode)
     }
 
@@ -391,7 +395,7 @@ class CPU(memory: Array[Int]) {
         else status &= ~OverflowFlagMask & 0xFF
     }
 
-    // start the operation by passing in the correct address to the opcode
+    // start the operation by passing in the correct address to the operation
     private def createOperation(
         addressingMode: AddressingMode.T,
         operationType: OperationType.T,
@@ -403,7 +407,7 @@ class CPU(memory: Array[Int]) {
 
         case AddressingMode.Immediate => {
             Cycles.add(() => {
-                operation(Some(memory(programCounter)))
+                operation(Some(programCounter))
                 programCounter += 1
             })
         }
@@ -514,21 +518,23 @@ class CPU(memory: Array[Int]) {
     private def createImpliedOperation(operation: () => Unit): Unit = operation()
 
     private def createRelativeOperation(branchCondition: () => Boolean): Unit = {
-        Cycles.add(fetchNextByte)
-        if (branchCondition()) Cycles.add(() => {
-            val PreviousPCPage = programCounter & 0xFF00
+        if (branchCondition()) {
+            Cycles.add(fetchNextByte)
+            Cycles.add(() => {
+                val PreviousPCPage = programCounter & 0xFF00
 
-            // Calculate signed offset (Byte -> Int)
-            var offset = Cycles.getNextStoredByte()
-            if ((offset & NegativeFlagMask) >> 7 == 1) {
-                offset |= (~0 << 8)
-            }
-            programCounter += offset
+                // Calculate signed offset (Byte -> Int)
+                var offset = Cycles.getNextStoredByte()
+                if ((offset & NegativeFlagMask) >> 7 == 1) {
+                    offset |= (~0 << 8)
+                }
+                programCounter += offset
 
-            // Add extra cycle if branching to a different page
-            if ((programCounter & 0xFF00) != PreviousPCPage) Cycles.add()
-        })
-        else Cycles.getNextStoredByte() // clear stored data
+                // Add extra cycle if branching to a different page
+                if ((programCounter & 0xFF00) != PreviousPCPage) Cycles.add()
+            })
+        }
+        else Cycles.add(() => programCounter += 1)
     }
 
 
@@ -700,6 +706,7 @@ class CPU(memory: Array[Int]) {
     }
 
     private def lda(address: Option[Int]): Unit = {
+        println(address.get)
         accumulator = memory(address.get)
         updateZeroFlag(accumulator == 0)
         updateNegativeFlag(accumulator)

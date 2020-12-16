@@ -19,7 +19,7 @@ object Console extends JFXApp {
     private val MasterClockSpeed = 21477272 // Hz
 
     private var fileLog = ""
-    def addLog(log: String): Unit = fileLog += "   MSG:" + log
+    def addLog(log: String): Unit = fileLog += "   " + log + "\n"
 
     // Create window and run main loop
     stage = new JFXApp.PrimaryStage {
