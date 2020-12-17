@@ -360,14 +360,13 @@ class CPU(memory: Array[Int]) {
     }
 
     private def pushToStack(data: Int): Unit = {
-        stackPointer -= 1
         memory(stackPointer) = data
+        stackPointer -= 1
     }
 
     private def pullFromStack(): Int = {
-        val data = memory(stackPointer)
         stackPointer += 1
-        data
+        memory(stackPointer)
     }
 
     private def addCycles(num: Int): Unit = for (i <- 1 to num) Cycles.add()
@@ -382,7 +381,8 @@ class CPU(memory: Array[Int]) {
 
     private def updateNegativeFlag(register: Int): Unit = {
         val NewNegativeFlag = register & NegativeFlagMask
-        status |= NewNegativeFlag
+        if (NewNegativeFlag > 0) status |= NewNegativeFlag
+        else status &= ~NegativeFlagMask & 0xFF
     }
 
     private def updateCarryFlag(condition: Boolean): Unit = {
@@ -586,10 +586,10 @@ class CPU(memory: Array[Int]) {
 
     private def bit(option: Option[Int]): Unit = {
         val data = memory(option.get)
-        if ((accumulator & data) > 0) status |= ZeroFlagMask
+        if ((accumulator & data) == 0) status |= ZeroFlagMask
         else status &= ~ZeroFlagMask
-        status |= data & OverflowFlagMask
-        status |= data & NegativeFlagMask
+        updateOverflowFlag((data & OverflowFlagMask) > 0)
+        updateNegativeFlag(data)
     }
 
     private def bne(): Boolean = !beq()
@@ -706,7 +706,6 @@ class CPU(memory: Array[Int]) {
     }
 
     private def lda(address: Option[Int]): Unit = {
-        println(address.get)
         accumulator = memory(address.get)
         updateZeroFlag(accumulator == 0)
         updateNegativeFlag(accumulator)
@@ -759,7 +758,11 @@ class CPU(memory: Array[Int]) {
 
     private def pla(): Unit = {
         addCycles(2)
-        Cycles.add(() => accumulator = pullFromStack())
+        Cycles.add(() => {
+            accumulator = pullFromStack()
+            updateZeroFlag(accumulator == 0)
+            updateNegativeFlag(accumulator)
+        })
     }
 
     private def plp(): Unit = {

@@ -19,7 +19,16 @@ object Console extends JFXApp {
     private val MasterClockSpeed = 21477272 // Hz
 
     private var fileLog = ""
+
     def addLog(log: String): Unit = fileLog += "   " + log + "\n"
+
+    def createLogFileAndExit(): Unit = {
+        val FileLogPrintWriter = new PrintWriter(new File("log.txt"))
+        FileLogPrintWriter.write(fileLog)
+        FileLogPrintWriter.close()
+        sys.exit()
+    }
+
 
     // Create window and run main loop
     stage = new JFXApp.PrimaryStage {
@@ -31,8 +40,6 @@ object Console extends JFXApp {
             val args = parameters.raw
 
             val RomFileName = args(0)
-            val IsDebugModeEnabled = args(1) == "debug"
-
 
             // Create Emulator Components
             val cartridge = new Cartridge(RomFileName)
@@ -43,16 +50,8 @@ object Console extends JFXApp {
             // TODO: Controller handling
             canvas.onKeyPressed = (e: KeyEvent) => e.code match {
 
-                // Space -> step once (debug mode)
-                case KeyCode.Space => if (IsDebugModeEnabled) runDebugCycle()
-
                 // P -> Power off
-                case KeyCode.P => {
-                    val FileLogPrintWriter = new PrintWriter(new File("log.txt"))
-                    FileLogPrintWriter.write(fileLog)
-                    FileLogPrintWriter.close()
-                    sys.exit()
-                }
+                case KeyCode.P => createLogFileAndExit()
 
                 case _ =>
             }
@@ -66,7 +65,9 @@ object Console extends JFXApp {
                     for (i <- 0 until MasterClockSpeed / 60) {
                         if (i % 12 == 0) {
                             fileLog += cpu.createSingleLineTextLogOutput()
-                            cpu.executeCycle()
+
+                            try cpu.executeCycle()
+                            catch { case e: Exception => createLogFileAndExit() }
 
                             //NESTEST CYCLE LIMIT:
                             if (cpu.cycleCount >= 26554) sys.exit()
@@ -76,14 +77,8 @@ object Console extends JFXApp {
                 }
             })
 
-            // Debug cycle
-            def runDebugCycle(): Unit = {
-                println(cpu.createTextLogOutput())
-                cpu.executeCycle()
-            }
-
             canvas.requestFocus()
-            if (!IsDebugModeEnabled) MainLoop.start()
+            MainLoop.start()
         }
     } 
 
