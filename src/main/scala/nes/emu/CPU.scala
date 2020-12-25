@@ -17,7 +17,7 @@ class CPU(memory: Array[Int]) {
     private val ZeroFlagMask = 1 << 1
     private val InterruptDisableFlagMask = 1 << 2
     private val DecimalFlagMask = 1 << 3
-    private val BFlagMask = 1 << 4
+    private val BFlagMask = 0x30 // 00110000
     private val OverflowFlagMask = 1 << 6
     private val NegativeFlagMask = 1 << 7
 
@@ -371,6 +371,10 @@ class CPU(memory: Array[Int]) {
 
     private def addCycles(num: Int): Unit = for (i <- 1 to num) Cycles.add()
 
+    private def createSignedIntFromByte(num: Int): Int = {
+        if ((num & NegativeFlagMask) >> 7 == 1) num | (~0 << 8)
+        else num
+    }
 
     /* ------ Flag updating methods ------ */
 
@@ -523,12 +527,7 @@ class CPU(memory: Array[Int]) {
             Cycles.add(() => {
                 val PreviousPCPage = programCounter & 0xFF00
 
-                // Calculate signed offset (Byte -> Int)
-                var offset = Cycles.getNextStoredByte()
-                if ((offset & NegativeFlagMask) >> 7 == 1) {
-                    offset |= (~0 << 8)
-                }
-                programCounter += offset
+                programCounter += createSignedIntFromByte(Cycles.getNextStoredByte())
 
                 // Add extra cycle if branching to a different page
                 if ((programCounter & 0xFF00) != PreviousPCPage) Cycles.add()
@@ -541,17 +540,19 @@ class CPU(memory: Array[Int]) {
     /* ------- Opcodes ------- */
 
     private def adc(address: Option[Int]): Unit = {
-        val PreviousSignBit = accumulator & NegativeFlagMask
+        val AccumulatorPreviousSignBit = accumulator & NegativeFlagMask
+        val MemoryPreviousSignBit = memory(address.get) & NegativeFlagMask
 
         accumulator += memory(address.get)
         accumulator += status & CarryFlagMask
 
         // Update Carry flag
-        val NewCarryFlag = (accumulator & 0x100) >> 8
+        val NewCarryFlag = accumulator & 0x100
         accumulator &= 0xFF
-        status |= NewCarryFlag
+        updateCarryFlag(NewCarryFlag > 0)
 
-        updateOverflowFlag((accumulator & NegativeFlagMask) != PreviousSignBit)
+        val SetOverflow = MemoryPreviousSignBit == AccumulatorPreviousSignBit && MemoryPreviousSignBit != (accumulator & NegativeFlagMask)
+        updateOverflowFlag(SetOverflow)
         updateZeroFlag(accumulator == 0)
         updateNegativeFlag(accumulator)
     }
@@ -630,21 +631,21 @@ class CPU(memory: Array[Int]) {
         val data = memory(address.get)
         updateCarryFlag(accumulator >= data)
         updateZeroFlag(accumulator == data)
-        updateNegativeFlag(accumulator)
+        updateNegativeFlag(accumulator - data)
     }
 
     private def cpx(address: Option[Int]): Unit = {
         val data = memory(address.get)
         updateCarryFlag(xIndex >= data)
         updateZeroFlag(xIndex == data)
-        updateNegativeFlag(xIndex)
+        updateNegativeFlag(xIndex - data)
     }
 
     private def cpy(address: Option[Int]): Unit = {
         val data = memory(address.get)
         updateCarryFlag(yIndex >= data)
         updateZeroFlag(yIndex == data)
-        updateNegativeFlag(yIndex)
+        updateNegativeFlag(yIndex - data)
     }
 
     private def dec(option: Option[Int]): Unit = {
@@ -741,7 +742,7 @@ class CPU(memory: Array[Int]) {
     private def nop(): Unit = Cycles.add()
 
     private def ora(address: Option[Int]): Unit = {
-        accumulator |= address.get
+        accumulator |= memory(address.get)
         updateZeroFlag(accumulator == 0)
         updateNegativeFlag(accumulator)
     }
@@ -753,7 +754,7 @@ class CPU(memory: Array[Int]) {
 
     private def php(): Unit = {
         Cycles.add()
-        Cycles.add(() => pushToStack(status))
+        Cycles.add(() => pushToStack(status | BFlagMask)) // Setting the B flag is a CPU quirk
     }
 
     private def pla(): Unit = {
@@ -767,7 +768,7 @@ class CPU(memory: Array[Int]) {
 
     private def plp(): Unit = {
         addCycles(2)
-        Cycles.add(() => status = pullFromStack())
+        Cycles.add(() => status = (pullFromStack() & 0xCF) | (status & 0x30)) // Ignore B flag bits
     }
 
     private def rol(option: Option[Int]): Unit = option match {
@@ -841,13 +842,13 @@ class CPU(memory: Array[Int]) {
     }
 
     private def sbc(address: Option[Int]): Unit = {
-        val PreviousSignBit = accumulator & NegativeFlagMask
-
         accumulator -= memory(address.get)
         accumulator -= ~(status & CarryFlagMask) & 1
+        accumulator &= 0xFF
 
-        updateCarryFlag(accumulator >= 0)
-        updateOverflowFlag((accumulator & NegativeFlagMask) != PreviousSignBit)
+        val SignedAccumulator = createSignedIntFromByte(accumulator)
+        updateCarryFlag(SignedAccumulator >= 0)
+        updateOverflowFlag(SignedAccumulator < -128 || SignedAccumulator > 127)
         updateZeroFlag(accumulator == 0)
         updateNegativeFlag(accumulator)
     }
