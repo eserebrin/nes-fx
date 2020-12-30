@@ -551,7 +551,7 @@ class CPU(memory: Array[Int]) {
         accumulator &= 0xFF
         updateCarryFlag(NewCarryFlag > 0)
 
-        val SetOverflow = MemoryPreviousSignBit == AccumulatorPreviousSignBit && MemoryPreviousSignBit != (accumulator & NegativeFlagMask)
+        val SetOverflow = MemoryPreviousSignBit == AccumulatorPreviousSignBit && AccumulatorPreviousSignBit != (accumulator & NegativeFlagMask)
         updateOverflowFlag(SetOverflow)
         updateZeroFlag(accumulator == 0)
         updateNegativeFlag(accumulator)
@@ -651,18 +651,21 @@ class CPU(memory: Array[Int]) {
     private def dec(option: Option[Int]): Unit = {
         val address = option.get
         memory(address) -= 1
+        memory(address) &= 0xFF
         updateZeroFlag(memory(address) == 0)
         updateNegativeFlag(memory(address))
     }
 
     private def dex(): Unit = Cycles.add(() => {
         xIndex -= 1
+        xIndex &= 0xFF
         updateZeroFlag(xIndex == 0)
         updateNegativeFlag(xIndex)
     })
 
     private def dey(): Unit = Cycles.add(() => {
         yIndex -= 1
+        yIndex &= 0xFF
         updateZeroFlag(yIndex == 0)
         updateNegativeFlag(yIndex)
     })
@@ -676,18 +679,21 @@ class CPU(memory: Array[Int]) {
     private def inc(option: Option[Int]): Unit = {
         val address = option.get
         memory(address) += 1
+        memory(address) &= 0xFF
         updateZeroFlag(memory(address) == 0)
         updateNegativeFlag(memory(address))
     }
 
     private def inx(): Unit = Cycles.add(() => {
         xIndex += 1
+        xIndex &= 0xFF
         updateZeroFlag(xIndex == 0)
         updateNegativeFlag(xIndex)
     })
 
     private def iny(): Unit = Cycles.add(() => {
         yIndex += 1
+        yIndex &= 0xFF
         updateZeroFlag(yIndex == 0)
         updateNegativeFlag(yIndex)
     })
@@ -842,13 +848,15 @@ class CPU(memory: Array[Int]) {
     }
 
     private def sbc(address: Option[Int]): Unit = {
+        val PreviousAccumulatorNegative = (accumulator & NegativeFlagMask) > 0
+
         accumulator -= memory(address.get)
         accumulator -= ~(status & CarryFlagMask) & 1
         accumulator &= 0xFF
 
-        val SignedAccumulator = createSignedIntFromByte(accumulator)
-        updateCarryFlag(SignedAccumulator >= 0)
-        updateOverflowFlag(SignedAccumulator < -128 || SignedAccumulator > 127)
+        val SetOverflow = PreviousAccumulatorNegative && (accumulator & NegativeFlagMask) == 0
+        updateCarryFlag(createSignedIntFromByte(accumulator) >= 0)
+        updateOverflowFlag(SetOverflow)
         updateZeroFlag(accumulator == 0)
         updateNegativeFlag(accumulator)
     }
@@ -861,11 +869,31 @@ class CPU(memory: Array[Int]) {
     private def stx(address: Option[Int]): Unit = memory(address.get) = xIndex
     private def sty(address: Option[Int]): Unit = memory(address.get) = yIndex
 
-    private def tax(): Unit = Cycles.add(() => xIndex = accumulator)
-    private def tay(): Unit = Cycles.add(() => yIndex = accumulator)
-    private def tsx(): Unit = Cycles.add(() => xIndex = stackPointer)
-    private def txa(): Unit = Cycles.add(() => accumulator = xIndex)
+    private def tax(): Unit = Cycles.add(() => {
+        xIndex = accumulator
+        updateZeroFlag(xIndex == 0)
+        updateNegativeFlag(xIndex)
+    })
+    private def tay(): Unit = Cycles.add(() => {
+        yIndex = accumulator
+        updateZeroFlag(yIndex == 0)
+        updateNegativeFlag(yIndex)
+    })
+    private def tsx(): Unit = Cycles.add(() => {
+        xIndex = stackPointer
+        updateZeroFlag(xIndex == 0)
+        updateNegativeFlag(xIndex)
+    })
+    private def txa(): Unit = Cycles.add(() => {
+        accumulator = xIndex
+        updateZeroFlag(accumulator == 0)
+        updateNegativeFlag(accumulator)
+    })
     private def txs(): Unit = Cycles.add(() => stackPointer = xIndex)
-    private def tya(): Unit = Cycles.add(() => accumulator = yIndex)
+    private def tya(): Unit = Cycles.add(() => {
+        accumulator = yIndex
+        updateZeroFlag(accumulator == 0)
+        updateNegativeFlag(accumulator)
+    })
 
 }
