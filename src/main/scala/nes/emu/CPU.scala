@@ -106,7 +106,6 @@ class CPU(memory: Array[Int]) {
             |Zero: ${(status & ZeroFlagMask) >> 1}%1d
             |Carry: ${status & CarryFlagMask}%1d
             |----------------------
-            |Memory 2-3: ${memory(0x200)}%02X ${memory(0x300)}%02X
          """.stripMargin('|')
     }
 
@@ -212,9 +211,9 @@ class CPU(memory: Array[Int]) {
 
         // INC (Increment memory)
         case 0xE6 => createOperation(AddressingMode.ZeroPage, OperationType.ReadModifyWrite, inc)
-        case 0xF6 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.ReadModifyWrite, inc)
+        case 0xF6 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.ReadModifyWrite, inc, xIndex)
         case 0xEE => createOperation(AddressingMode.Absolute, OperationType.ReadModifyWrite, inc)
-        case 0xFE => createOperation(AddressingMode.AbsoluteIndexed, OperationType.ReadModifyWrite, inc)
+        case 0xFE => createOperation(AddressingMode.AbsoluteIndexed, OperationType.ReadModifyWrite, inc, xIndex)
 
         // INX (Increment X register)
         case 0xE8 => createImpliedOperation(inx)
@@ -239,14 +238,14 @@ class CPU(memory: Array[Int]) {
         case 0xA1 => createOperation(AddressingMode.IndexedIndirect, OperationType.Read, lda)
         case 0xB1 => createOperation(AddressingMode.IndirectIndexed, OperationType.Read, lda)
 
-        // LDA (Load X register)
+        // LDX (Load X register)
         case 0xA2 => createOperation(AddressingMode.Immediate, OperationType.Read, ldx)
         case 0xA6 => createOperation(AddressingMode.ZeroPage, OperationType.Read, ldx)
         case 0xB6 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.Read, ldx, yIndex)
         case 0xAE => createOperation(AddressingMode.Absolute, OperationType.Read, ldx)
         case 0xBE => createOperation(AddressingMode.AbsoluteIndexed, OperationType.Read, ldx, yIndex)
 
-        // LDA (Load Y register)
+        // LDY (Load Y register)
         case 0xA0 => createOperation(AddressingMode.Immediate, OperationType.Read, ldy)
         case 0xA4 => createOperation(AddressingMode.ZeroPage, OperationType.Read, ldy)
         case 0xB4 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.Read, ldy, xIndex)
@@ -360,13 +359,15 @@ class CPU(memory: Array[Int]) {
     }
 
     private def pushToStack(data: Int): Unit = {
-        memory(stackPointer) = data
+        memory(0x100 |  stackPointer) = data
         stackPointer -= 1
+        stackPointer &= 0xFF // wrap around at stack overflow
     }
 
     private def pullFromStack(): Int = {
         stackPointer += 1
-        memory(stackPointer)
+        stackPointer &= 0xFF // wrap around at stack underflow
+        memory(0x100 | stackPointer)
     }
 
     private def addCycles(num: Int): Unit = for (i <- 1 to num) Cycles.add()
@@ -453,7 +454,7 @@ class CPU(memory: Array[Int]) {
             Cycles.add(() => {
                 val AddressLowByte = Cycles.getNextStoredByte()
                 val AddressHighByte = Cycles.getNextStoredByte() << 8
-                val Address = (AddressHighByte | AddressLowByte) + index
+                val Address = ((AddressHighByte | AddressLowByte) + index) & 0xFFFF
 
                 if (operationType == OperationType.Read) {
                     // Extra cycle needed if page boundary crossed
@@ -471,25 +472,24 @@ class CPU(memory: Array[Int]) {
         case AddressingMode.Indirect => {
             Cycles.add(fetchNextByte)
             Cycles.add(fetchNextByte)
+            Cycles.add()
             Cycles.add(() => {
                 val PointerLowByte = Cycles.getNextStoredByte()
-                var pointerHighByte = Cycles.getNextStoredByte()
+                val PointerHighByte = Cycles.getNextStoredByte()
 
-                // Replicate page boundary bug:
-                if ((pointerHighByte & 0xFF) == 0xFF) pointerHighByte = 0
-                else pointerHighByte <<= 8
+                val AddressLowByte = memory((PointerHighByte << 8) | PointerLowByte)
+                val AddressHighByte = if (PointerLowByte == 0xFF) memory(PointerHighByte << 8)
+                                      else memory((PointerHighByte << 8) | (PointerLowByte + 1))
 
-                val Pointer = pointerHighByte | PointerLowByte
-                Cycles.storeByte(Pointer)
+                operation(Some((AddressHighByte << 8) | AddressLowByte))
             })
-            Cycles.add(() => operation(Some(Cycles.getNextStoredByte())))
         }
 
         case AddressingMode.IndexedIndirect => {
             Cycles.add(fetchNextByte)
             Cycles.add(() => Cycles.storeByte((Cycles.getNextStoredByte() + xIndex) & 0xFF))
             Cycles.add(() => Cycles.storeByte(memory(Cycles.peekNextStoredByte())))
-            Cycles.add(() => Cycles.storeByte(memory(Cycles.getNextStoredByte + 1)))
+            Cycles.add(() => Cycles.storeByte(memory((Cycles.getNextStoredByte() + 1) & 0xFF)))
             if (operationType == OperationType.ReadModifyWrite) addCycles(2)
             Cycles.add(() => operation(Some(getStoredAddress())))
         }
@@ -497,11 +497,11 @@ class CPU(memory: Array[Int]) {
         case AddressingMode.IndirectIndexed => {
             Cycles.add(fetchNextByte)
             Cycles.add(() => Cycles.storeByte(memory(Cycles.peekNextStoredByte())))
-            Cycles.add(() => Cycles.storeByte(memory(Cycles.getNextStoredByte + 1)))
+            Cycles.add(() => Cycles.storeByte(memory((Cycles.getNextStoredByte() + 1) & 0xFF)))
             Cycles.add(() => {
                 val AddressLowByte = Cycles.getNextStoredByte()
                 val AddressHighByte = Cycles.getNextStoredByte() << 8
-                val Address = (AddressHighByte | AddressLowByte) + yIndex
+                val Address = ((AddressHighByte | AddressLowByte) + yIndex) & 0xFFFF
 
                 if (operationType == OperationType.Read) {
                     // Extra cycle needed if page boundary crossed
@@ -566,14 +566,16 @@ class CPU(memory: Array[Int]) {
     private def asl(option: Option[Int]): Unit = option match {
         case Some(address) => {
             // Set Carry flag to previous bit 7
-            status |= ((memory(address) & NegativeFlagMask) >> 7)
+            updateCarryFlag((memory(address) & NegativeFlagMask) > 0)
             memory(address) <<= 1
+            memory(address) &= 0xFF
             updateZeroFlag(memory(address) == 0)
             updateNegativeFlag(memory(address))
         }
         case None => {
-            status |= ((accumulator & NegativeFlagMask) >> 7)
+            updateCarryFlag((accumulator & NegativeFlagMask) > 0)
             accumulator <<= 1
+            accumulator &= 0xFF
             updateZeroFlag(accumulator == 0)
             updateNegativeFlag(accumulator)
         }
@@ -732,14 +734,16 @@ class CPU(memory: Array[Int]) {
 
     private def lsr(option: Option[Int]): Unit = option match {
         case Some(address) => {
-            status |= memory(address) & CarryFlagMask
+            updateCarryFlag((memory(address) & CarryFlagMask) > 0)
             memory(address) >>= 1
+            memory(address) &= 0xFF
             updateZeroFlag(memory(address) == 0)
             updateNegativeFlag(memory(address))
         }
         case None => {
-            status |= accumulator & CarryFlagMask
+            updateCarryFlag((accumulator & CarryFlagMask) > 0)
             accumulator >>= 1
+            accumulator &= 0xFF
             updateZeroFlag(accumulator == 0)
             updateNegativeFlag(accumulator)
         }
@@ -784,6 +788,7 @@ class CPU(memory: Array[Int]) {
 
             memory(address) <<= 1
             memory(address) |= status & CarryFlagMask
+            memory(address) &= 0xFF
 
             status |= NewCarryFlag
             updateZeroFlag(memory(address) == 0)
@@ -795,6 +800,7 @@ class CPU(memory: Array[Int]) {
 
             accumulator <<= 1
             accumulator |= status & CarryFlagMask
+            accumulator &= 0xFF
 
             status |= NewCarryFlag
             updateZeroFlag(accumulator == 0)
@@ -827,12 +833,12 @@ class CPU(memory: Array[Int]) {
 
     private def rti(): Unit = {
         addCycles(2)
-        Cycles.add(() => status = pullFromStack())
+        Cycles.add(() => status = (pullFromStack() & 0xCF) | (status & 0x30)) // Ignore B flag bits
         Cycles.add(() => Cycles.storeByte(pullFromStack()))
         Cycles.add(() => {
             val ProgramCounterLowByte = Cycles.getNextStoredByte()
-            val ProgramCounterHighByte = pullFromStack() << 8
-            programCounter = ProgramCounterHighByte | ProgramCounterLowByte
+            val ProgramCounterHighByte = pullFromStack()
+            programCounter = (ProgramCounterHighByte << 8) | ProgramCounterLowByte
         })
     }
 

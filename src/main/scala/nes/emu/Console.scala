@@ -66,11 +66,17 @@ object Console extends JFXApp {
                         if (i % 12 == 0) {
                             fileLog += cpu.createSingleLineTextLogOutput()
 
+                            // cpu.executeCycle()
                             try cpu.executeCycle()
-                            catch { case e: Exception => createLogFileAndExit() }
+                            catch { 
+                                case e: Exception => {
+                                    println(s"Caught exception in CPU cycle ${cpu.cycleCount}")
+                                    createLogFileAndExit() 
+                                }
+                            }
 
                             //NESTEST CYCLE LIMIT:
-                            if (cpu.cycleCount >= 26554) sys.exit()
+                            if (cpu.cycleCount >= 26554) createLogFileAndExit()
                         }
                     }
                     oldT = t
