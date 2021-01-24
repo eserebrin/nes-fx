@@ -2,7 +2,7 @@ package nes.emu
 
 import scala.collection.mutable
 
-class CPU(memory: Array[Int]) {
+class CPU(memory: Mapper) {
 
     // CPU registers
     private var accumulator = 0
@@ -209,7 +209,7 @@ class CPU(memory: Array[Int]) {
         case 0x41 => createOperation(AddressingMode.IndexedIndirect, OperationType.Read, eor)
         case 0x51 => createOperation(AddressingMode.IndirectIndexed, OperationType.Read, eor)
 
-        // INC (Increment memory)
+        // INC (Increment Memory)
         case 0xE6 => createOperation(AddressingMode.ZeroPage, OperationType.ReadModifyWrite, inc)
         case 0xF6 => createOperation(AddressingMode.ZeroPageIndexed, OperationType.ReadModifyWrite, inc, xIndex)
         case 0xEE => createOperation(AddressingMode.Absolute, OperationType.ReadModifyWrite, inc)

@@ -1,15 +1,27 @@
 package nes.emu
 
 abstract class Mapper {
-    // private val RAM = Array.fill(0x800)(0)
-    // private val PPURegisters = Array.fill(8)(0)
-    // private val PPURegisterMirrrors = PPURegisters * 8
-    // private val APURegisters = Array.fill(0x18)(0)
-    // private val APUArea = Array.fill(8)(0)
 
     protected val CPUMemoryMap = Array.fill(0x4020)(0)
+    protected var cpuAddressSpace = new Array[Int](0)
 
-    def getCPUAddressSpace(): Array[Int]
+    def apply(address: Int): Int = cpuAddressSpace(address)
+    def update(address: Int, value: Int): Unit = {
+        cpuAddressSpace(address) = value
+
+        // Memory mirroring
+        if (address >= 0 && address <= 0x7FF) {
+            for (i <- 1 to 3) {
+                cpuAddressSpace(address + 0x800 * i) = value
+            }
+        }
+        if (address >= 0x2000 && address <= 2008) {
+            for (i <- 1 to 8) {
+                cpuAddressSpace(address + 0x1000 * i) = value
+            }
+        }
+    }
+
 }
 
 object Mapper {

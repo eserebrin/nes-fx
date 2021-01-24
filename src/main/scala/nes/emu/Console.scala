@@ -42,9 +42,9 @@ object Console extends JFXApp {
             val RomFileName = args(0)
 
             // Create Emulator Components
-            val cartridge = new Cartridge(RomFileName)
-            val mapper = Mapper(cartridge)
-            val cpu = new CPU(mapper.getCPUAddressSpace())
+            val mapper = Mapper(new Cartridge(RomFileName))
+            val cpu = new CPU(mapper)
+            val ppu = new PPU(mapper)
 
 
             // TODO: Controller handling
@@ -64,16 +64,10 @@ object Console extends JFXApp {
                     // Emulate clock speed
                     for (i <- 0 until MasterClockSpeed / 60) {
                         if (i % 12 == 0) {
-                            fileLog += cpu.createSingleLineTextLogOutput()
+                            println(cpu.createTextLogOutput())
+                            // fileLog += cpu.createSingleLineTextLogOutput()
 
-                            // cpu.executeCycle()
-                            try cpu.executeCycle()
-                            catch { 
-                                case e: Exception => {
-                                    println(s"Caught exception in CPU cycle ${cpu.cycleCount}")
-                                    createLogFileAndExit() 
-                                }
-                            }
+                            cpu.executeCycle()
 
                             //NESTEST CYCLE LIMIT:
                             if (cpu.cycleCount >= 26554) createLogFileAndExit()
