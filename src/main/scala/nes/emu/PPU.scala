@@ -12,4 +12,20 @@ class PPU(memory: Mapper) {
     private val PPUADDR = 0x2006
     private val PPUDATA = 0x2007
     private val OAMDMA = 0x4014
+
+    private var evenFrame = true
+
+    private val SpriteXPositions = new Array(8)
+
+    def executeCycle(): Unit = {
+        println("Executing PPU Cycle")
+    }
+
+    def loadShiftRegisters(): Unit = {
+    }
+
+    def executeFrame(): Unit = {
+        evenFrame = !evenFrame
+    }
+
 }
